@@ -1,0 +1,103 @@
+#include "AuthService.h"
+
+#include "../models/Common.h"
+
+#include <functional>
+#include <regex>
+#include <sstream>
+#include <stdexcept>
+
+namespace finsight::core::services {
+
+models::User AuthService::registerUser(const std::string& fullName,
+                                       const std::string& email,
+                                       const std::string& phone,
+                                       const std::string& gender,
+                                       const std::string& password,
+                                       const models::Date& createdAt) {
+    if (fullName.empty() || email.empty() || password.empty()) {
+        throw std::invalid_argument("Full name, email, and password are required.");
+    }
+    for (const auto& user : users_) {
+        if (models::toLower(user.email) == models::toLower(email)) {
+            throw std::invalid_argument("Email is already registered.");
+        }
+    }
+
+    models::User user {
+        .id = nextId(),
+        .fullName = fullName,
+        .email = email,
+        .phone = phone,
+        .gender = gender,
+        .passwordHash = hashPassword(password),
+        .createdAt = createdAt,
+    };
+    users_.push_back(user);
+    return user;
+}
+
+std::optional<models::User> AuthService::login(const std::string& email,
+                                               const std::string& password) const {
+    const auto hashedPassword = hashPassword(password);
+    for (const auto& user : users_) {
+        if (models::toLower(user.email) == models::toLower(email) &&
+            user.passwordHash == hashedPassword) {
+            return user;
+        }
+    }
+    return std::nullopt;
+}
+
+models::User AuthService::updateProfile(const std::string& userId,
+                                        const std::string& fullName,
+                                        const std::string& phone,
+                                        const std::string& gender) {
+    for (auto& user : users_) {
+        if (user.id == userId) {
+            user.fullName = fullName;
+            user.phone = phone;
+            user.gender = gender;
+            return user;
+        }
+    }
+    throw std::out_of_range("User not found.");
+}
+
+const models::User& AuthService::getUser(const std::string& userId) const {
+    for (const auto& user : users_) {
+        if (user.id == userId) {
+            return user;
+        }
+    }
+    throw std::out_of_range("User not found.");
+}
+
+std::vector<models::User> AuthService::listUsers() const {
+    return users_;
+}
+
+void AuthService::loadUsers(std::vector<models::User> users) {
+    users_ = std::move(users);
+    std::size_t maxId = 0;
+    const std::regex pattern(R"(usr-(\d+))");
+    for (const auto& user : users_) {
+        std::smatch match;
+        if (std::regex_match(user.id, match, pattern)) {
+            maxId = std::max<std::size_t>(maxId, static_cast<std::size_t>(std::stoull(match[1].str())));
+        }
+    }
+    nextUserId_ = maxId + 1;
+}
+
+std::string AuthService::nextId() {
+    std::ostringstream stream;
+    stream << "usr-" << nextUserId_++;
+    return stream.str();
+}
+
+std::string AuthService::hashPassword(const std::string& password) {
+    return std::to_string(std::hash<std::string> {}(password));
+}
+
+}  // namespace finsight::core::services

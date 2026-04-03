@@ -1,0 +1,3 @@
+txn-1	usr-1	Monthly Salary	April salary	cat-1	income	18000.000000	2026-04-01	Employer	
+txn-2	usr-1	Groceries	Weekly grocery trip	cat-3	expense	950.000000	2026-04-02	Local Market	
+txn-3	usr-1	Receipt import	Imported from parsed receipt	cat-3	expense	2026.000000	2026-04-02	Local Market	
