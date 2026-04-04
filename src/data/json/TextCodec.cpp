@@ -1,9 +1,12 @@
 #include "TextCodec.h"
 
+using namespace std;
+
 namespace finsight::data::json {
 
-std::string escape(const std::string& value) {
-    std::string escaped;
+// Escapes tabs, newlines, and slashes before persistence.
+string escape(const string& value) {
+    string escaped;
     escaped.reserve(value.size());
     for (char ch : value) {
         switch (ch) {
@@ -27,10 +30,11 @@ std::string escape(const std::string& value) {
     return escaped;
 }
 
-std::string unescape(const std::string& value) {
-    std::string unescaped;
+// Restores escaped characters after reading stored text.
+string unescape(const string& value) {
+    string unescaped;
     unescaped.reserve(value.size());
-    for (std::size_t index = 0; index < value.size(); ++index) {
+    for (size_t index = 0; index < value.size(); ++index) {
         if (value[index] == '\\' && index + 1 < value.size()) {
             ++index;
             switch (value[index]) {
@@ -57,9 +61,10 @@ std::string unescape(const std::string& value) {
     return unescaped;
 }
 
-std::string encodeRow(const std::vector<std::string>& fields) {
-    std::string row;
-    for (std::size_t index = 0; index < fields.size(); ++index) {
+// Joins many fields into one tab-separated row.
+string encodeRow(const vector<string>& fields) {
+    string row;
+    for (size_t index = 0; index < fields.size(); ++index) {
         if (index > 0) {
             row.push_back('\t');
         }
@@ -68,9 +73,10 @@ std::string encodeRow(const std::vector<std::string>& fields) {
     return row;
 }
 
-std::vector<std::string> decodeRow(const std::string& row) {
-    std::vector<std::string> fields;
-    std::string current;
+// Splits one stored row back into separate fields.
+vector<string> decodeRow(const string& row) {
+    vector<string> fields;
+    string current;
     bool escaped = false;
 
     for (char ch : row) {
@@ -99,9 +105,10 @@ std::vector<std::string> decodeRow(const std::string& row) {
     return fields;
 }
 
-std::string encodeList(const std::vector<std::string>& values) {
-    std::string encoded;
-    for (std::size_t index = 0; index < values.size(); ++index) {
+// Joins a list of strings into one escaped field.
+string encodeList(const vector<string>& values) {
+    string encoded;
+    for (size_t index = 0; index < values.size(); ++index) {
         if (index > 0) {
             encoded.push_back('|');
         }
@@ -110,9 +117,10 @@ std::string encodeList(const std::vector<std::string>& values) {
     return encoded;
 }
 
-std::vector<std::string> decodeList(const std::string& value) {
-    std::vector<std::string> result;
-    std::string current;
+// Splits one escaped list field back into separate values.
+vector<string> decodeList(const string& value) {
+    vector<string> result;
+    string current;
     bool escaped = false;
 
     for (char ch : value) {

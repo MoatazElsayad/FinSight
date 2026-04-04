@@ -1,9 +1,11 @@
 #include "core/managers/FinanceTrackerBackend.h"
+#include "core/utils/EnvLoader.h"
 #include "data/storage/BackendStore.h"
 
-#include <cstdlib>
 #include <iostream>
 #include <string>
+
+using namespace std;
 
 int main() {
     using finsight::core::managers::FinanceTrackerBackend;
@@ -21,16 +23,21 @@ int main() {
     using finsight::core::models::Transaction;
     using finsight::core::models::TransactionType;
     using finsight::core::models::YearMonth;
+    using finsight::core::utils::EnvLoader;
     using finsight::data::storage::BackendStore;
 
-    const char* apiKeyValue = std::getenv("FINSIGHT_OPENROUTER_API_KEY");
-    const std::string apiKey = apiKeyValue == nullptr ? "PASTE_REAL_API_KEY_HERE" : apiKeyValue;
+    // Loads environment values from the nearest .env file before building the AI config.
+    EnvLoader::loadFromNearestFile();
+    const string apiUrl = EnvLoader::get("FINSIGHT_OPENROUTER_API_URL", "https://openrouter.ai/api/v1/chat/completions");
+    const string apiKey = EnvLoader::get("FINSIGHT_OPENROUTER_API_KEY", "PASTE_REAL_API_KEY_HERE");
+    const string primaryModel = EnvLoader::get("FINSIGHT_OPENROUTER_MODEL", "liquid/lfm-2.5-1.2b-instruct:free");
 
+    // Builds a demo backend instance and configures the AI provider.
     FinanceTrackerBackend backend;
     backend.ai().configure(AIProviderConfig {
-        .apiUrl = "https://openrouter.ai/api/v1/chat/completions",
+        .apiUrl = apiUrl,
         .apiKey = apiKey,
-        .model = "liquid/lfm-2.5-1.2b-instruct:free",
+        .model = primaryModel,
         .fallbackModels = {
             "liquid/lfm-2.5-1.2b-thinking:free",
             "meta-llama/llama-3.3-70b-instruct:free",
@@ -41,6 +48,7 @@ int main() {
         .appName = "FinSight",
         .appUrl = "https://example.com/finsight",
     });
+    // Creates one demo user and session for the sample run.
     const auto user = backend.auth().registerUser(
         "Demo User",
         "demo@finsight.local",
@@ -50,10 +58,12 @@ int main() {
         Date {2026, 4, 3});
     const auto session = backend.sessions().startSession(user.id, Date {2026, 4, 3});
 
+    // Loads built-in categories used by the rest of the demo.
     const auto categories = backend.transactions().getCategoriesForUser(user.id);
     const auto salaryCategory = categories.at(0);
     const auto foodCategory = categories.at(2);
 
+    // Adds sample income and expense transactions.
     backend.transactions().addTransaction(Transaction {
         .userId = user.id,
         .title = "Monthly Salary",
@@ -76,6 +86,7 @@ int main() {
         .merchant = "Local Market",
     });
 
+    // Adds sample budgets, savings, investments, and goals.
     backend.budgets().createBudget(user.id, foodCategory.id, YearMonth {2026, 4}, 3000.0);
     backend.savings().setGoal(user.id, 5000.0, 100000.0, Date {2026, 12, 31});
     backend.savings().addEntry(SavingsEntry {
@@ -106,6 +117,7 @@ int main() {
         .targetDate = Date {2026, 12, 31},
     });
 
+    // Adds sample pantry and shopping list data.
     backend.shopping().upsertPantryItem(PantryItem {
         .userId = user.id,
         .name = "Rice",
@@ -124,6 +136,7 @@ int main() {
         .createdAt = Date {2026, 4, 3},
     });
 
+    // Runs the receipt import flow using sample OCR text.
     const auto receipt = backend.receipts().uploadReceipt(
         user.id,
         "market_receipt.txt",
@@ -144,6 +157,7 @@ int main() {
         },
         backend.transactions());
 
+    // Builds analytics, reports, and AI outputs from the sample data.
     const auto dashboard = backend.analytics().buildDashboard(
         user.id,
         YearMonth {2026, 4},
@@ -185,11 +199,13 @@ int main() {
         "Local Market\n2026-04-02\nTOTAL 950.00\nFood and groceries",
         "Local Market");
 
+    // Saves the backend state and reloads it into a fresh instance.
     BackendStore store;
-    store.save(backend, "runtime_data");
+    const auto persistenceDirectory = filesystem::path {"runtime_data"};
+    store.save(backend, persistenceDirectory);
 
     FinanceTrackerBackend restoredBackend;
-    store.load(restoredBackend, "runtime_data");
+    store.load(restoredBackend, persistenceDirectory);
     const auto restoredDashboard = restoredBackend.analytics().buildDashboard(
         user.id,
         YearMonth {2026, 4},
@@ -198,27 +214,31 @@ int main() {
         restoredBackend.savings(),
         restoredBackend.goals());
 
-    std::cout << "FinSight backend demo\n";
-    std::cout << "Session token: " << session.token << '\n';
-    std::cout << "Income: " << dashboard.overview.income << '\n';
-    std::cout << "Expenses: " << dashboard.overview.expenses << '\n';
-    std::cout << "Net savings: " << dashboard.overview.netSavings << '\n';
-    std::cout << "Savings balance: " << dashboard.savings.currentBalance << '\n';
-    std::cout << "Active goals: " << dashboard.activeGoals.size() << '\n';
-    std::cout << "Low stock items: " << shoppingSnapshot.lowStockItems.size() << '\n';
-    std::cout << "Report net: " << report.net << '\n';
-    std::cout << "AI dashboard fallback: " << (aiDashboard.usedFallback ? "yes" : "no") << '\n';
-    std::cout << "AI dashboard summary: " << aiDashboard.summary << '\n';
-    std::cout << "AI savings fallback: " << (aiSavings.usedFallback ? "yes" : "no") << '\n';
-    std::cout << "AI savings summary: " << aiSavings.summary << '\n';
-    std::cout << "AI chat answer: " << aiChat.answer << '\n';
-    std::cout << "AI receipt notes: " << aiReceipt.parseResult.confidenceNotes << '\n';
-    std::cout << "AI models tried: " << backend.ai().config().model;
+    // Prints a compact summary so the demo results are easy to inspect.
+    cout << "FinSight backend demo\n";
+    cout << "Session token: " << session.token << '\n';
+    cout << "Income: " << dashboard.overview.income << '\n';
+    cout << "Expenses: " << dashboard.overview.expenses << '\n';
+    cout << "Net savings: " << dashboard.overview.netSavings << '\n';
+    cout << "Savings balance: " << dashboard.savings.currentBalance << '\n';
+    cout << "Active goals: " << dashboard.activeGoals.size() << '\n';
+    cout << "Low stock items: " << shoppingSnapshot.lowStockItems.size() << '\n';
+    cout << "Report net: " << report.net << '\n';
+    cout << "AI dashboard fallback: " << (aiDashboard.usedFallback ? "yes" : "no") << '\n';
+    cout << "AI dashboard summary: " << aiDashboard.summary << '\n';
+    cout << "AI savings fallback: " << (aiSavings.usedFallback ? "yes" : "no") << '\n';
+    cout << "AI savings summary: " << aiSavings.summary << '\n';
+    cout << "AI chat answer: " << aiChat.answer << '\n';
+    cout << "AI receipt notes: " << aiReceipt.parseResult.confidenceNotes << '\n';
+    cout << "AI models tried: " << backend.ai().config().model;
     for (const auto& model : backend.ai().config().fallbackModels) {
-        std::cout << ", " << model;
+        cout << ", " << model;
     }
-    std::cout << '\n';
-    std::cout << "Restored expenses: " << restoredDashboard.overview.expenses << '\n';
+    cout << '\n';
+    cout << "AI URL: " << backend.ai().config().apiUrl << '\n';
+    cout << "SQLite file: " << store.databasePath(persistenceDirectory).string() << '\n';
+    cout << "JSON sidecar: " << store.sidecarPath(persistenceDirectory).string() << '\n';
+    cout << "Restored expenses: " << restoredDashboard.overview.expenses << '\n';
 
     return 0;
 }

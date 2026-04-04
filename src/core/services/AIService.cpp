@@ -11,19 +11,25 @@
 #include <cctype>
 #include <sstream>
 
+using namespace std;
+
 namespace finsight::core::services {
 
+// Builds the AI service with default settings.
 AIService::AIService() = default;
 
+// Replaces the current provider configuration.
 void AIService::configure(models::AIProviderConfig config) {
-    config_ = std::move(config);
+    config_ = move(config);
 }
 
+// Returns the current provider configuration.
 const models::AIProviderConfig& AIService::config() const {
     return config_;
 }
 
-models::AIDashboardInsight AIService::generateDashboardInsight(const std::string& userId,
+// Generates AI commentary for the dashboard view.
+models::AIDashboardInsight AIService::generateDashboardInsight(const string& userId,
                                                                const models::YearMonth& period,
                                                                const AnalyticsService& analyticsService,
                                                                const TransactionService& transactionService,
@@ -49,7 +55,8 @@ models::AIDashboardInsight AIService::generateDashboardInsight(const std::string
     return insight;
 }
 
-models::AISavingsInsight AIService::analyzeSavings(const std::string& userId,
+// Generates AI commentary focused on savings progress.
+models::AISavingsInsight AIService::analyzeSavings(const string& userId,
                                                    const models::YearMonth& period,
                                                    const SavingsService& savingsService) const {
     const auto context = buildSavingsContext(userId, period, savingsService);
@@ -65,8 +72,9 @@ models::AISavingsInsight AIService::analyzeSavings(const std::string& userId,
     return insight;
 }
 
-models::AIFinanceChatAnswer AIService::answerFinanceQuestion(const std::string& userId,
-                                                             const std::string& question,
+// Answers a free-form finance question using the current backend data.
+models::AIFinanceChatAnswer AIService::answerFinanceQuestion(const string& userId,
+                                                             const string& question,
                                                              const models::YearMonth& period,
                                                              const AnalyticsService& analyticsService,
                                                              const TransactionService& transactionService,
@@ -91,8 +99,9 @@ models::AIFinanceChatAnswer AIService::answerFinanceQuestion(const std::string& 
     };
 }
 
-models::AIReceiptSuggestion AIService::suggestReceiptTransaction(const std::string& rawText,
-                                                                 const std::string& merchantHint) const {
+// Asks the model for receipt interpretation guidance from raw text.
+models::AIReceiptSuggestion AIService::suggestReceiptTransaction(const string& rawText,
+                                                                 const string& merchantHint) const {
     const auto response = runChatCompletion({
         {"system", "You extract transaction details from receipt text. Keep the response short and structured."},
         {"user", "Infer merchant, amount, likely category, and confidence notes from this receipt text:\n" +
@@ -109,12 +118,13 @@ models::AIReceiptSuggestion AIService::suggestReceiptTransaction(const std::stri
     return suggestion;
 }
 
-models::AIChatResponse AIService::runChatCompletion(const std::vector<models::AIMessage>& messages) const {
+// Tries the configured model list until one returns a valid answer.
+models::AIChatResponse AIService::runChatCompletion(const vector<models::AIMessage>& messages) const {
     network::ai::ChatCompletionClient client;
     models::AIChatResponse lastResponse;
     const auto models = configuredModels(config_);
 
-    for (std::size_t index = 0; index < models.size(); ++index) {
+    for (size_t index = 0; index < models.size(); ++index) {
         auto response = client.complete(config_, models::AIChatRequest {
                                                      .model = models[index],
                                                      .messages = messages,
@@ -125,7 +135,7 @@ models::AIChatResponse AIService::runChatCompletion(const std::vector<models::AI
         if (response.success) {
             return response;
         }
-        lastResponse = std::move(response);
+        lastResponse = move(response);
     }
 
     if (lastResponse.content.empty()) {
@@ -137,14 +147,15 @@ models::AIChatResponse AIService::runChatCompletion(const std::vector<models::AI
     return lastResponse;
 }
 
-std::vector<std::string> AIService::configuredModels(const models::AIProviderConfig& config) {
-    std::vector<std::string> models;
+// Builds the ordered model list used for retries.
+vector<string> AIService::configuredModels(const models::AIProviderConfig& config) {
+    vector<string> models;
     if (!config.model.empty()) {
         models.push_back(config.model);
     }
     for (const auto& fallback : config.fallbackModels) {
         if (!fallback.empty() &&
-            std::find(models.begin(), models.end(), fallback) == models.end()) {
+            find(models.begin(), models.end(), fallback) == models.end()) {
             models.push_back(fallback);
         }
     }
@@ -154,14 +165,15 @@ std::vector<std::string> AIService::configuredModels(const models::AIProviderCon
     return models;
 }
 
-std::vector<std::string> AIService::splitBulletLines(const std::string& text) {
-    std::vector<std::string> lines;
-    std::istringstream stream(text);
-    std::string line;
-    while (std::getline(stream, line)) {
+// Splits an AI response into short recommendation lines.
+vector<string> AIService::splitBulletLines(const string& text) {
+    vector<string> lines;
+    istringstream stream(text);
+    string line;
+    while (getline(stream, line)) {
         line.erase(line.begin(),
-                   std::find_if(line.begin(), line.end(), [](unsigned char ch) {
-                       return !std::isspace(ch) && ch != '-' && ch != '*' && ch != '1' && ch != '.' && ch != ')';
+                   find_if(line.begin(), line.end(), [](unsigned char ch) {
+                       return !isspace(ch) && ch != '-' && ch != '*' && ch != '1' && ch != '.' && ch != ')';
                    }));
         if (!line.empty()) {
             lines.push_back(line);
@@ -170,7 +182,8 @@ std::vector<std::string> AIService::splitBulletLines(const std::string& text) {
     return lines;
 }
 
-std::string AIService::buildDashboardContext(const std::string& userId,
+// Formats dashboard data into prompt-ready text.
+string AIService::buildDashboardContext(const string& userId,
                                              const models::YearMonth& period,
                                              const AnalyticsService& analyticsService,
                                              const TransactionService& transactionService,
@@ -185,7 +198,7 @@ std::string AIService::buildDashboardContext(const std::string& userId,
         savingsService,
         goalService);
 
-    std::ostringstream context;
+    ostringstream context;
     context << "Period: " << period.year << "-" << period.month << "\n";
     context << "Income: " << dashboard.overview.income << "\n";
     context << "Expenses: " << dashboard.overview.expenses << "\n";
@@ -209,11 +222,12 @@ std::string AIService::buildDashboardContext(const std::string& userId,
     return context.str();
 }
 
-std::string AIService::buildSavingsContext(const std::string& userId,
+// Formats savings data into prompt-ready text.
+string AIService::buildSavingsContext(const string& userId,
                                            const models::YearMonth& period,
                                            const SavingsService& savingsService) {
     const auto savings = savingsService.summarize(userId, period);
-    std::ostringstream context;
+    ostringstream context;
     context << "Period: " << period.year << "-" << period.month << "\n";
     context << "Current balance: " << savings.currentBalance << "\n";
     context << "Monthly saved: " << savings.monthlySaved << "\n";
@@ -223,7 +237,8 @@ std::string AIService::buildSavingsContext(const std::string& userId,
     return context.str();
 }
 
-std::string AIService::fallbackReceiptCategoryName(const std::string& rawText) {
+// Builds a simple merchant/category fallback from receipt text.
+string AIService::fallbackReceiptCategoryName(const string& rawText) {
     if (models::containsCaseInsensitive(rawText, "market") ||
         models::containsCaseInsensitive(rawText, "grocery") ||
         models::containsCaseInsensitive(rawText, "food")) {

@@ -6,55 +6,65 @@
 #include <string>
 #include <vector>
 
+using namespace std;
+
 namespace finsight::core::models {
 
+// Stores the provider settings used by the AI client.
 struct AIProviderConfig {
-    std::string apiUrl {"https://openrouter.ai/api/v1/chat/completions"};
-    std::string apiKey {"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"};
-    std::string model {"openrouter/free"};
-    std::vector<std::string> fallbackModels;
-    std::string appName {"FinSight"};
-    std::string appUrl {"https://example.com/finsight"};
+    string apiUrl {"https://openrouter.ai/api/v1/chat/completions"};
+    string apiKey {"PASTE_REAL_API_KEY_HERE"};
+    string model {"openrouter/free"};
+    vector<string> fallbackModels;
+    string appName {"FinSight"};
+    string appUrl {"https://example.com/finsight"};
 };
 
+// Represents one chat message sent to the model.
 struct AIMessage {
-    std::string role;
-    std::string content;
+    string role;
+    string content;
 };
 
+// Describes a chat completion request.
 struct AIChatRequest {
-    std::string model;
-    std::vector<AIMessage> messages;
+    string model;
+    vector<AIMessage> messages;
     double temperature {0.2};
 };
 
+// Captures the model response and fallback metadata.
 struct AIChatResponse {
     bool success {false};
-    std::string model;
-    std::string content;
-    std::string rawResponse;
-    std::string error;
+    string model;
+    string content;
+    string rawResponse;
+    string error;
     bool usedFallback {false};
-    std::vector<std::string> attemptedModels;
+    vector<string> attemptedModels;
 };
 
+// Holds AI-generated dashboard commentary.
 struct AIDashboardInsight {
-    std::string summary;
-    std::vector<std::string> recommendations;
+    string summary;
+    vector<string> recommendations;
     bool usedFallback {false};
 };
 
+// Holds AI-generated savings advice.
 struct AISavingsInsight {
-    std::string summary;
-    std::vector<std::string> actions;
+    string summary;
+    vector<string> actions;
     bool usedFallback {false};
 };
 
+// Holds the answer for a finance chat question.
 struct AIFinanceChatAnswer {
-    std::string answer;
+    string answer;
     bool usedFallback {false};
 };
 
+// Holds AI-assisted receipt parsing suggestions.
 struct AIReceiptSuggestion {
     ReceiptParseResult parseResult;
     bool usedFallback {false};

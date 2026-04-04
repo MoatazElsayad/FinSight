@@ -5,6 +5,8 @@
 #include <fstream>
 #include <sstream>
 
+using namespace std;
+
 namespace finsight::network::ai {
 
 namespace {
@@ -17,8 +19,9 @@ namespace {
 #define FINSIGHT_PCLOSE pclose
 #endif
 
-std::string readPipe(const std::string& command) {
-    std::string output;
+// Reads the full stdout output of a shell command.
+string readPipe(const string& command) {
+    string output;
     FILE* pipe = FINSIGHT_POPEN(command.c_str(), "r");
     if (pipe == nullptr) {
         return {};
@@ -32,12 +35,14 @@ std::string readPipe(const std::string& command) {
     return output;
 }
 
-bool hasRealKey(const std::string& apiKey) {
+// Checks whether the configured API key has been replaced with a real value.
+bool hasRealKey(const string& apiKey) {
     return !apiKey.empty() && apiKey != "PASTE_REAL_API_KEY_HERE";
 }
 
 }  // namespace
 
+// Sends one chat-completion request and parses the returned text.
 core::models::AIChatResponse ChatCompletionClient::complete(const core::models::AIProviderConfig& config,
                                                             const core::models::AIChatRequest& request) const {
     core::models::AIChatResponse response {.model = request.model.empty() ? config.model : request.model};
@@ -52,7 +57,7 @@ core::models::AIChatResponse ChatCompletionClient::complete(const core::models::
     const auto payload = buildPayload(request);
     const auto payloadPath = writeTempPayload(payload);
 
-    std::ostringstream command;
+    ostringstream command;
     command << "curl -sS -X POST \"" << config.apiUrl << "\" "
             << "--max-time 20 "
             << "-H \"Authorization: Bearer " << config.apiKey << "\" "
@@ -76,8 +81,9 @@ core::models::AIChatResponse ChatCompletionClient::complete(const core::models::
     return response;
 }
 
-std::string ChatCompletionClient::escapeJson(const std::string& value) {
-    std::string escaped;
+// Escapes raw text before it is inserted into JSON.
+string ChatCompletionClient::escapeJson(const string& value) {
+    string escaped;
     for (char ch : value) {
         switch (ch) {
         case '\\':
@@ -103,13 +109,14 @@ std::string ChatCompletionClient::escapeJson(const std::string& value) {
     return escaped;
 }
 
-std::string ChatCompletionClient::buildPayload(const core::models::AIChatRequest& request) {
-    std::ostringstream payload;
+// Builds the JSON request body for the chat API.
+string ChatCompletionClient::buildPayload(const core::models::AIChatRequest& request) {
+    ostringstream payload;
     payload << "{";
     payload << "\"model\":\"" << escapeJson(request.model) << "\",";
     payload << "\"temperature\":" << request.temperature << ",";
     payload << "\"messages\":[";
-    for (std::size_t index = 0; index < request.messages.size(); ++index) {
+    for (size_t index = 0; index < request.messages.size(); ++index) {
         if (index > 0) {
             payload << ",";
         }
@@ -123,17 +130,18 @@ std::string ChatCompletionClient::buildPayload(const core::models::AIChatRequest
     return payload.str();
 }
 
-std::string ChatCompletionClient::extractContent(const std::string& responseBody) {
-    const auto marker = std::string {"\"content\":\""};
+// Extracts the assistant content field from the raw JSON response.
+string ChatCompletionClient::extractContent(const string& responseBody) {
+    const auto marker = string {"\"content\":\""};
     auto position = responseBody.find(marker);
-    if (position == std::string::npos) {
+    if (position == string::npos) {
         return {};
     }
     position += marker.size();
 
-    std::string content;
+    string content;
     bool escaped = false;
-    for (std::size_t index = position; index < responseBody.size(); ++index) {
+    for (size_t index = position; index < responseBody.size(); ++index) {
         const char ch = responseBody[index];
         if (escaped) {
             switch (ch) {
@@ -165,16 +173,18 @@ std::string ChatCompletionClient::extractContent(const std::string& responseBody
     return content;
 }
 
-std::string ChatCompletionClient::writeTempPayload(const std::string& payload) {
-    const auto path = (std::filesystem::temp_directory_path() / "finsight_ai_payload.json").string();
-    std::ofstream output(path, std::ios::trunc);
+// Writes the payload to a temporary file so curl can send it.
+string ChatCompletionClient::writeTempPayload(const string& payload) {
+    const auto path = (filesystem::temp_directory_path() / "finsight_ai_payload.json").string();
+    ofstream output(path, ios::trunc);
     output << payload;
     return path;
 }
 
-void ChatCompletionClient::deleteTempPayload(const std::string& path) {
-    std::error_code error;
-    std::filesystem::remove(path, error);
+// Removes the temporary payload file after the request finishes.
+void ChatCompletionClient::deleteTempPayload(const string& path) {
+    error_code error;
+    filesystem::remove(path, error);
 }
 
 }  // namespace finsight::network::ai

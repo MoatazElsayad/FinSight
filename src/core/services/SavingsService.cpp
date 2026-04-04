@@ -5,8 +5,11 @@
 #include <sstream>
 #include <stdexcept>
 
+using namespace std;
+
 namespace finsight::core::services {
 
+// Adds one savings entry to the ledger.
 models::SavingsEntry SavingsService::addEntry(models::SavingsEntry entry) {
     if (entry.userId.empty() || entry.amount <= 0.0) {
         throw std::invalid_argument("Savings entry requires user and positive amount.");
@@ -16,6 +19,7 @@ models::SavingsEntry SavingsService::addEntry(models::SavingsEntry entry) {
     return entry;
 }
 
+// Deletes one savings entry.
 void SavingsService::deleteEntry(const std::string& userId, const std::string& entryId) {
     auto iterator = std::find_if(entries_.begin(), entries_.end(), [&](const auto& entry) {
         return entry.id == entryId && entry.userId == userId;
@@ -26,6 +30,7 @@ void SavingsService::deleteEntry(const std::string& userId, const std::string& e
     entries_.erase(iterator);
 }
 
+// Returns all savings entries for one user in descending date order.
 std::vector<models::SavingsEntry> SavingsService::listEntries(const std::string& userId) const {
     std::vector<models::SavingsEntry> result;
     for (const auto& entry : entries_) {
@@ -39,6 +44,7 @@ std::vector<models::SavingsEntry> SavingsService::listEntries(const std::string&
     return result;
 }
 
+// Creates or updates the user's savings goals.
 models::SavingsGoal SavingsService::setGoal(const std::string& userId,
                                             double monthlyTarget,
                                             double longTermTarget,
@@ -63,6 +69,7 @@ models::SavingsGoal SavingsService::setGoal(const std::string& userId,
     return goal;
 }
 
+// Builds a monthly savings summary.
 models::SavingsOverview SavingsService::summarize(const std::string& userId,
                                                   const models::YearMonth& period) const {
     double balance = 0.0;
@@ -94,6 +101,7 @@ models::SavingsOverview SavingsService::summarize(const std::string& userId,
     return overview;
 }
 
+// Adds a new investment position.
 models::Investment SavingsService::addInvestment(models::Investment investment) {
     if (investment.userId.empty() || investment.assetName.empty() || investment.quantity <= 0.0) {
         throw std::invalid_argument("Investment requires user, asset name, and quantity.");
@@ -103,6 +111,7 @@ models::Investment SavingsService::addInvestment(models::Investment investment) 
     return investment;
 }
 
+// Updates the latest rate for one investment.
 models::Investment SavingsService::updateInvestmentRate(const std::string& userId,
                                                         const std::string& investmentId,
                                                         double currentRate) {
@@ -115,6 +124,7 @@ models::Investment SavingsService::updateInvestmentRate(const std::string& userI
     throw std::out_of_range("Investment not found.");
 }
 
+// Deletes one investment.
 void SavingsService::deleteInvestment(const std::string& userId, const std::string& investmentId) {
     auto iterator = std::find_if(investments_.begin(), investments_.end(), [&](const auto& investment) {
         return investment.id == investmentId && investment.userId == userId;
@@ -125,6 +135,7 @@ void SavingsService::deleteInvestment(const std::string& userId, const std::stri
     investments_.erase(iterator);
 }
 
+// Returns all investments for one user.
 std::vector<models::Investment> SavingsService::listInvestments(const std::string& userId) const {
     std::vector<models::Investment> result;
     for (const auto& investment : investments_) {
@@ -135,6 +146,7 @@ std::vector<models::Investment> SavingsService::listInvestments(const std::strin
     return result;
 }
 
+// Calculates current value snapshots for a user's investments.
 std::vector<models::InvestmentSnapshot> SavingsService::investmentSnapshots(const std::string& userId) const {
     std::vector<models::InvestmentSnapshot> result;
     for (const auto& investment : investments_) {
@@ -153,18 +165,22 @@ std::vector<models::InvestmentSnapshot> SavingsService::investmentSnapshots(cons
     return result;
 }
 
+// Returns every stored savings entry.
 std::vector<models::SavingsEntry> SavingsService::allEntries() const {
     return entries_;
 }
 
+// Returns every stored investment.
 std::vector<models::Investment> SavingsService::allInvestments() const {
     return investments_;
 }
 
+// Returns every stored savings goal.
 std::vector<models::SavingsGoal> SavingsService::allGoals() const {
     return goals_;
 }
 
+// Restores savings, investment, and goal state from persisted data.
 void SavingsService::loadState(std::vector<models::SavingsEntry> entries,
                                std::vector<models::Investment> investments,
                                std::vector<models::SavingsGoal> goals) {
@@ -203,18 +219,21 @@ void SavingsService::loadState(std::vector<models::SavingsEntry> entries,
     nextGoalId_ = maxGoalId + 1;
 }
 
+// Builds the next savings entry id string.
 std::string SavingsService::nextEntryId() {
     std::ostringstream stream;
     stream << "svg-" << nextEntryId_++;
     return stream.str();
 }
 
+// Builds the next investment id string.
 std::string SavingsService::nextInvestmentId() {
     std::ostringstream stream;
     stream << "inv-" << nextInvestmentId_++;
     return stream.str();
 }
 
+// Builds the next savings goal id string.
 std::string SavingsService::nextGoalId() {
     std::ostringstream stream;
     stream << "svg-goal-" << nextGoalId_++;

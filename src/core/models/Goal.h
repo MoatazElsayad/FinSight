@@ -4,8 +4,11 @@
 
 #include <string>
 
+using namespace std;
+
 namespace finsight::core::models {
 
+// Represents a long-term finance target the user is tracking.
 struct Goal {
     std::string id;
     std::string userId;

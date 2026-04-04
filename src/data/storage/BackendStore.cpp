@@ -9,21 +9,117 @@
 #include <sstream>
 #include <stdexcept>
 
+#include <sqlite3.h>
+
+using namespace std;
+
 namespace finsight::data::storage {
 
 namespace {
 
 using namespace finsight::core;
 
-std::string boolToString(bool value) {
+// Manages the SQLite connection lifetime for one save/load operation.
+class SqliteConnection {
+public:
+    explicit SqliteConnection(const filesystem::path& path) {
+        if (sqlite3_open(path.string().c_str(), &db_) != SQLITE_OK) {
+            const string message = db_ == nullptr ? "Failed to open SQLite database."
+                                                  : sqlite3_errmsg(db_);
+            if (db_ != nullptr) {
+                sqlite3_close(db_);
+                db_ = nullptr;
+            }
+            throw runtime_error(message);
+        }
+    }
+
+    ~SqliteConnection() {
+        if (db_ != nullptr) {
+            sqlite3_close(db_);
+        }
+    }
+
+    sqlite3* get() const {
+        return db_;
+    }
+
+private:
+    sqlite3* db_ {nullptr};
+};
+
+// Executes one SQL statement without returning rows.
+void exec(sqlite3* db, const string& sql) {
+    char* errorMessage = nullptr;
+    if (sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errorMessage) != SQLITE_OK) {
+        const string message = errorMessage == nullptr ? "SQLite execution failed." : errorMessage;
+        sqlite3_free(errorMessage);
+        throw runtime_error(message);
+    }
+}
+
+// Prepares one reusable SQLite statement.
+sqlite3_stmt* prepare(sqlite3* db, const string& sql) {
+    sqlite3_stmt* statement = nullptr;
+    if (sqlite3_prepare_v2(db, sql.c_str(), -1, &statement, nullptr) != SQLITE_OK) {
+        throw runtime_error(sqlite3_errmsg(db));
+    }
+    return statement;
+}
+
+// Finalizes a prepared statement.
+void finalize(sqlite3_stmt* statement) {
+    if (statement != nullptr) {
+        sqlite3_finalize(statement);
+    }
+}
+
+// Resets a prepared statement after one execution.
+void reset(sqlite3_stmt* statement) {
+    sqlite3_reset(statement);
+    sqlite3_clear_bindings(statement);
+}
+
+// Steps a prepared statement and throws on failure.
+void stepDone(sqlite3* db, sqlite3_stmt* statement) {
+    if (sqlite3_step(statement) != SQLITE_DONE) {
+        throw runtime_error(sqlite3_errmsg(db));
+    }
+}
+
+// Binds a string value to a statement parameter.
+void bindText(sqlite3* db, sqlite3_stmt* statement, int index, const string& value) {
+    if (sqlite3_bind_text(statement, index, value.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK) {
+        throw runtime_error(sqlite3_errmsg(db));
+    }
+}
+
+// Binds a double value to a statement parameter.
+void bindDouble(sqlite3* db, sqlite3_stmt* statement, int index, double value) {
+    if (sqlite3_bind_double(statement, index, value) != SQLITE_OK) {
+        throw runtime_error(sqlite3_errmsg(db));
+    }
+}
+
+// Binds an integer value to a statement parameter.
+void bindInt(sqlite3* db, sqlite3_stmt* statement, int index, int value) {
+    if (sqlite3_bind_int(statement, index, value) != SQLITE_OK) {
+        throw runtime_error(sqlite3_errmsg(db));
+    }
+}
+
+// Converts a boolean into a compact persisted string.
+string boolToString(bool value) {
     return value ? "1" : "0";
 }
 
-bool toBool(const std::string& value) {
+// Restores a boolean value from persisted text.
+bool toBool(const string& value) {
     return value == "1" || value == "true";
 }
 
-std::string toString(models::CategoryKind kind) {
+// Converts a category enum into storage text.
+string toString(models::CategoryKind kind) {
     switch (kind) {
     case models::CategoryKind::Income:
         return "income";
@@ -37,30 +133,36 @@ std::string toString(models::CategoryKind kind) {
     return "expense";
 }
 
-models::CategoryKind toCategoryKind(const std::string& value) {
+// Restores a category enum from storage text.
+models::CategoryKind toCategoryKind(const string& value) {
     if (value == "income") return models::CategoryKind::Income;
     if (value == "savings") return models::CategoryKind::Savings;
     if (value == "investment") return models::CategoryKind::Investment;
     return models::CategoryKind::Expense;
 }
 
-std::string toString(models::TransactionType type) {
+// Converts a transaction enum into storage text.
+string toString(models::TransactionType type) {
     return type == models::TransactionType::Income ? "income" : "expense";
 }
 
-models::TransactionType toTransactionType(const std::string& value) {
+// Restores a transaction enum from storage text.
+models::TransactionType toTransactionType(const string& value) {
     return value == "income" ? models::TransactionType::Income : models::TransactionType::Expense;
 }
 
-std::string toString(models::SavingsEntryType type) {
+// Converts a savings-entry enum into storage text.
+string toString(models::SavingsEntryType type) {
     return type == models::SavingsEntryType::Deposit ? "deposit" : "withdrawal";
 }
 
-models::SavingsEntryType toSavingsEntryType(const std::string& value) {
+// Restores a savings-entry enum from storage text.
+models::SavingsEntryType toSavingsEntryType(const string& value) {
     return value == "withdrawal" ? models::SavingsEntryType::Withdrawal : models::SavingsEntryType::Deposit;
 }
 
-std::string toString(models::InvestmentType type) {
+// Converts an investment enum into storage text.
+string toString(models::InvestmentType type) {
     switch (type) {
     case models::InvestmentType::Gold:
         return "gold";
@@ -76,7 +178,8 @@ std::string toString(models::InvestmentType type) {
     return "other";
 }
 
-models::InvestmentType toInvestmentType(const std::string& value) {
+// Restores an investment enum from storage text.
+models::InvestmentType toInvestmentType(const string& value) {
     if (value == "gold") return models::InvestmentType::Gold;
     if (value == "silver") return models::InvestmentType::Silver;
     if (value == "currency") return models::InvestmentType::Currency;
@@ -84,7 +187,8 @@ models::InvestmentType toInvestmentType(const std::string& value) {
     return models::InvestmentType::Other;
 }
 
-std::string toString(models::ReceiptStatus status) {
+// Converts a receipt status enum into storage text.
+string toString(models::ReceiptStatus status) {
     switch (status) {
     case models::ReceiptStatus::Uploaded:
         return "uploaded";
@@ -96,325 +200,681 @@ std::string toString(models::ReceiptStatus status) {
     return "uploaded";
 }
 
-models::ReceiptStatus toReceiptStatus(const std::string& value) {
+// Restores a receipt status enum from storage text.
+models::ReceiptStatus toReceiptStatus(const string& value) {
     if (value == "parsed") return models::ReceiptStatus::Parsed;
     if (value == "confirmed") return models::ReceiptStatus::Confirmed;
     return models::ReceiptStatus::Uploaded;
 }
 
-void writeLines(const std::filesystem::path& path, const std::vector<std::string>& lines) {
-    std::ofstream output(path, std::ios::trunc);
-    if (!output) {
-        throw std::runtime_error("Failed to open file for writing: " + path.string());
-    }
-    for (const auto& line : lines) {
-        output << line << '\n';
-    }
-}
-
-std::vector<std::string> readLines(const std::filesystem::path& path) {
-    std::vector<std::string> lines;
-    std::ifstream input(path);
-    if (!input) {
-        return lines;
-    }
-
-    std::string line;
-    while (std::getline(input, line)) {
-        if (!line.empty()) {
-            lines.push_back(line);
-        }
-    }
-    return lines;
-}
-
-double toDouble(const std::string& value) {
-    return value.empty() ? 0.0 : std::stod(value);
-}
-
-int toInt(const std::string& value) {
-    return value.empty() ? 0 : std::stoi(value);
-}
-
-std::string optionalDate(const std::optional<models::Date>& value) {
+// Converts an optional date into persisted text.
+string optionalDate(const optional<models::Date>& value) {
     return value ? value->toString() : "";
 }
 
-std::string optionalAmount(const std::optional<double>& value) {
-    return value ? std::to_string(*value) : "";
+// Converts an optional amount into persisted text.
+string optionalAmount(const optional<double>& value) {
+    return value ? to_string(*value) : "";
 }
 
-std::optional<models::Date> parseOptionalDate(const std::string& value) {
+// Parses an optional date from stored text.
+optional<models::Date> parseOptionalDate(const string& value) {
     if (value.empty()) {
-        return std::nullopt;
+        return nullopt;
     }
     return models::Date::fromString(value);
 }
 
-std::optional<double> parseOptionalAmount(const std::string& value) {
+// Parses an optional amount from stored text.
+optional<double> parseOptionalAmount(const string& value) {
     if (value.empty()) {
-        return std::nullopt;
+        return nullopt;
     }
-    return std::stod(value);
+    return stod(value);
+}
+
+// Escapes raw text before it is written inside JSON string values.
+string jsonEscape(const string& value) {
+    string escaped;
+    for (char ch : value) {
+        switch (ch) {
+        case '\\':
+            escaped += "\\\\";
+            break;
+        case '"':
+            escaped += "\\\"";
+            break;
+        case '\n':
+            escaped += "\\n";
+            break;
+        case '\r':
+            escaped += "\\r";
+            break;
+        case '\t':
+            escaped += "\\t";
+            break;
+        default:
+            escaped.push_back(ch);
+            break;
+        }
+    }
+    return escaped;
+}
+
+// Restores escaped JSON characters inside string values.
+string jsonUnescape(const string& value) {
+    string unescaped;
+    bool escaped = false;
+    for (char ch : value) {
+        if (escaped) {
+            switch (ch) {
+            case 'n':
+                unescaped.push_back('\n');
+                break;
+            case 'r':
+                unescaped.push_back('\r');
+                break;
+            case 't':
+                unescaped.push_back('\t');
+                break;
+            default:
+                unescaped.push_back(ch);
+                break;
+            }
+            escaped = false;
+            continue;
+        }
+        if (ch == '\\') {
+            escaped = true;
+            continue;
+        }
+        unescaped.push_back(ch);
+    }
+    return unescaped;
+}
+
+// Writes one named JSON array that stores encoded row strings.
+void appendStringArray(ostringstream& jsonOut, const string& key, const vector<string>& values, bool trailingComma) {
+    jsonOut << "  \"" << key << "\":[";
+    for (size_t index = 0; index < values.size(); ++index) {
+        if (index > 0) {
+            jsonOut << ",";
+        }
+        jsonOut << "\"" << jsonEscape(values[index]) << "\"";
+    }
+    jsonOut << "]";
+    if (trailingComma) {
+        jsonOut << ",";
+    }
+    jsonOut << "\n";
+}
+
+// Parses one JSON string array written by appendStringArray.
+vector<string> parseStringArray(const string& content, const string& key) {
+    const string marker = "\"" + key + "\":[";
+    const auto markerPosition = content.find(marker);
+    if (markerPosition == string::npos) {
+        return {};
+    }
+
+    vector<string> values;
+    size_t index = markerPosition + marker.size();
+    while (index < content.size()) {
+        while (index < content.size() && isspace(static_cast<unsigned char>(content[index]))) {
+            ++index;
+        }
+        if (index >= content.size() || content[index] == ']') {
+            break;
+        }
+        if (content[index] != '"') {
+            break;
+        }
+
+        ++index;
+        string value;
+        bool escaped = false;
+        while (index < content.size()) {
+            const char ch = content[index++];
+            if (escaped) {
+                value.push_back('\\');
+                value.push_back(ch);
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch == '"') {
+                break;
+            }
+            value.push_back(ch);
+        }
+        values.push_back(jsonUnescape(value));
+
+        while (index < content.size() && isspace(static_cast<unsigned char>(content[index]))) {
+            ++index;
+        }
+        if (index < content.size() && content[index] == ',') {
+            ++index;
+        }
+    }
+    return values;
+}
+
+// Writes the flexible side data to one JSON sidecar file.
+void writeSidecarJson(const filesystem::path& path,
+                      const vector<string>& receipts,
+                      const vector<string>& parsedReceipts,
+                      const vector<string>& pantryItems,
+                      const vector<string>& shoppingItems) {
+    ofstream output(path, ios::trunc);
+    if (!output) {
+        throw runtime_error("Failed to open JSON sidecar for writing: " + path.string());
+    }
+
+    ostringstream jsonOut;
+    jsonOut << "{\n";
+    jsonOut << "  \"format\":\"finsight-sidecar-v1\",\n";
+    appendStringArray(jsonOut, "receipts", receipts, true);
+    appendStringArray(jsonOut, "parsedReceipts", parsedReceipts, true);
+    appendStringArray(jsonOut, "pantryItems", pantryItems, true);
+    appendStringArray(jsonOut, "shoppingItems", shoppingItems, false);
+    jsonOut << "}\n";
+    output << jsonOut.str();
+}
+
+// Reads the full JSON sidecar file if it exists.
+string readSidecarJson(const filesystem::path& path) {
+    ifstream input(path);
+    if (!input) {
+        return {};
+    }
+    ostringstream content;
+    content << input.rdbuf();
+    return content.str();
+}
+
+// Creates the SQLite schema used for the structured app data.
+void ensureSchema(sqlite3* db) {
+    exec(db, R"sql(
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            full_name TEXT NOT NULL,
+            email TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            gender TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS categories (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            icon TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            built_in INTEGER NOT NULL,
+            archived INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS transactions (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            category_id TEXT NOT NULL,
+            type TEXT NOT NULL,
+            amount REAL NOT NULL,
+            date TEXT NOT NULL,
+            merchant TEXT NOT NULL,
+            tags TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS budgets (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            category_id TEXT NOT NULL,
+            year INTEGER NOT NULL,
+            month INTEGER NOT NULL,
+            limit_amount REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS savings_entries (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            type TEXT NOT NULL,
+            amount REAL NOT NULL,
+            date TEXT NOT NULL,
+            note TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS savings_goals (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            monthly_target REAL NOT NULL,
+            long_term_target REAL NOT NULL,
+            target_date TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS investments (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            asset_name TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            type TEXT NOT NULL,
+            quantity REAL NOT NULL,
+            buy_rate REAL NOT NULL,
+            current_rate REAL NOT NULL,
+            purchase_date TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS goals (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            target_amount REAL NOT NULL,
+            current_amount REAL NOT NULL,
+            target_date TEXT NOT NULL,
+            completed INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            issued_on TEXT NOT NULL,
+            active INTEGER NOT NULL
+        );
+    )sql");
+}
+
+// Clears existing rows before a full save.
+void clearTables(sqlite3* db) {
+    exec(db, R"sql(
+        DELETE FROM users;
+        DELETE FROM categories;
+        DELETE FROM transactions;
+        DELETE FROM budgets;
+        DELETE FROM savings_entries;
+        DELETE FROM savings_goals;
+        DELETE FROM investments;
+        DELETE FROM goals;
+        DELETE FROM sessions;
+    )sql");
+}
+
+// Removes the old file-based artifacts left from the previous persistence version.
+void cleanupLegacyFiles(const filesystem::path& directory) {
+    const vector<filesystem::path> legacyFiles {
+        directory / "users.tsv",
+        directory / "categories.tsv",
+        directory / "transactions.tsv",
+        directory / "budgets.tsv",
+        directory / "savings_entries.tsv",
+        directory / "savings_goals.tsv",
+        directory / "investments.tsv",
+        directory / "goals.tsv",
+        directory / "sessions.tsv",
+        directory / "receipts.tsv",
+        directory / "parsed_receipts.tsv",
+        directory / "pantry.tsv",
+        directory / "shopping.tsv",
+    };
+
+    for (const auto& path : legacyFiles) {
+        error_code error;
+        filesystem::remove(path, error);
+    }
 }
 
 }  // namespace
 
+// Returns the SQLite database path for one persistence directory.
+filesystem::path BackendStore::databasePath(const filesystem::path& directory) const {
+    return directory / "finsight.db";
+}
+
+// Returns the JSON sidecar path for one persistence directory.
+filesystem::path BackendStore::sidecarPath(const filesystem::path& directory) const {
+    return directory / "sidecar.json";
+}
+
+// Saves the backend using SQLite for core data and JSON for flexible side data.
 void BackendStore::save(const core::managers::FinanceTrackerBackend& backend,
-                        const std::filesystem::path& directory) const {
-    std::filesystem::create_directories(directory);
+                        const filesystem::path& directory) const {
+    filesystem::create_directories(directory);
+    cleanupLegacyFiles(directory);
 
-    std::vector<std::string> users;
-    for (const auto& user : backend.auth().listUsers()) {
-        users.push_back(json::encodeRow({
-            user.id, user.fullName, user.email, user.phone, user.gender, user.passwordHash, user.createdAt.toString()}));
+    SqliteConnection connection(databasePath(directory));
+    sqlite3* db = connection.get();
+    ensureSchema(db);
+    exec(db, "BEGIN IMMEDIATE TRANSACTION;");
+    try {
+        clearTables(db);
+
+        sqlite3_stmt* statement = nullptr;
+
+        statement = prepare(db, "INSERT INTO users VALUES (?, ?, ?, ?, ?, ?, ?);");
+        for (const auto& user : backend.auth().listUsers()) {
+            bindText(db, statement, 1, user.id);
+            bindText(db, statement, 2, user.fullName);
+            bindText(db, statement, 3, user.email);
+            bindText(db, statement, 4, user.phone);
+            bindText(db, statement, 5, user.gender);
+            bindText(db, statement, 6, user.passwordHash);
+            bindText(db, statement, 7, user.createdAt.toString());
+            stepDone(db, statement);
+            reset(statement);
+        }
+        finalize(statement);
+
+        statement = prepare(db, "INSERT INTO categories VALUES (?, ?, ?, ?, ?, ?, ?);");
+        for (const auto& category : backend.transactions().getCategories()) {
+            bindText(db, statement, 1, category.id);
+            bindText(db, statement, 2, category.userId);
+            bindText(db, statement, 3, category.name);
+            bindText(db, statement, 4, category.icon);
+            bindText(db, statement, 5, toString(category.kind));
+            bindInt(db, statement, 6, category.builtIn ? 1 : 0);
+            bindInt(db, statement, 7, category.archived ? 1 : 0);
+            stepDone(db, statement);
+            reset(statement);
+        }
+        finalize(statement);
+
+        statement = prepare(db, "INSERT INTO transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);");
+        for (const auto& transaction : backend.transactions().allTransactions()) {
+            bindText(db, statement, 1, transaction.id);
+            bindText(db, statement, 2, transaction.userId);
+            bindText(db, statement, 3, transaction.title);
+            bindText(db, statement, 4, transaction.description);
+            bindText(db, statement, 5, transaction.categoryId);
+            bindText(db, statement, 6, toString(transaction.type));
+            bindDouble(db, statement, 7, transaction.amount);
+            bindText(db, statement, 8, transaction.date.toString());
+            bindText(db, statement, 9, transaction.merchant);
+            bindText(db, statement, 10, json::encodeList(transaction.tags));
+            stepDone(db, statement);
+            reset(statement);
+        }
+        finalize(statement);
+
+        statement = prepare(db, "INSERT INTO budgets VALUES (?, ?, ?, ?, ?, ?);");
+        for (const auto& budget : backend.budgets().allBudgets()) {
+            bindText(db, statement, 1, budget.id);
+            bindText(db, statement, 2, budget.userId);
+            bindText(db, statement, 3, budget.categoryId);
+            bindInt(db, statement, 4, budget.period.year);
+            bindInt(db, statement, 5, budget.period.month);
+            bindDouble(db, statement, 6, budget.limit);
+            stepDone(db, statement);
+            reset(statement);
+        }
+        finalize(statement);
+
+        statement = prepare(db, "INSERT INTO savings_entries VALUES (?, ?, ?, ?, ?, ?);");
+        for (const auto& entry : backend.savings().allEntries()) {
+            bindText(db, statement, 1, entry.id);
+            bindText(db, statement, 2, entry.userId);
+            bindText(db, statement, 3, toString(entry.type));
+            bindDouble(db, statement, 4, entry.amount);
+            bindText(db, statement, 5, entry.date.toString());
+            bindText(db, statement, 6, entry.note);
+            stepDone(db, statement);
+            reset(statement);
+        }
+        finalize(statement);
+
+        statement = prepare(db, "INSERT INTO savings_goals VALUES (?, ?, ?, ?, ?);");
+        for (const auto& goal : backend.savings().allGoals()) {
+            bindText(db, statement, 1, goal.id);
+            bindText(db, statement, 2, goal.userId);
+            bindDouble(db, statement, 3, goal.monthlyTarget);
+            bindDouble(db, statement, 4, goal.longTermTarget);
+            bindText(db, statement, 5, goal.targetDate.toString());
+            stepDone(db, statement);
+            reset(statement);
+        }
+        finalize(statement);
+
+        statement = prepare(db, "INSERT INTO investments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);");
+        for (const auto& investment : backend.savings().allInvestments()) {
+            bindText(db, statement, 1, investment.id);
+            bindText(db, statement, 2, investment.userId);
+            bindText(db, statement, 3, investment.assetName);
+            bindText(db, statement, 4, investment.symbol);
+            bindText(db, statement, 5, toString(investment.type));
+            bindDouble(db, statement, 6, investment.quantity);
+            bindDouble(db, statement, 7, investment.buyRate);
+            bindDouble(db, statement, 8, investment.currentRate);
+            bindText(db, statement, 9, investment.purchaseDate.toString());
+            stepDone(db, statement);
+            reset(statement);
+        }
+        finalize(statement);
+
+        statement = prepare(db, "INSERT INTO goals VALUES (?, ?, ?, ?, ?, ?, ?, ?);");
+        for (const auto& goal : backend.goals().allGoals()) {
+            bindText(db, statement, 1, goal.id);
+            bindText(db, statement, 2, goal.userId);
+            bindText(db, statement, 3, goal.title);
+            bindText(db, statement, 4, goal.description);
+            bindDouble(db, statement, 5, goal.targetAmount);
+            bindDouble(db, statement, 6, goal.currentAmount);
+            bindText(db, statement, 7, goal.targetDate.toString());
+            bindInt(db, statement, 8, goal.completed ? 1 : 0);
+            stepDone(db, statement);
+            reset(statement);
+        }
+        finalize(statement);
+
+        statement = prepare(db, "INSERT INTO sessions VALUES (?, ?, ?, ?);");
+        for (const auto& session : backend.sessions().allSessions()) {
+            bindText(db, statement, 1, session.token);
+            bindText(db, statement, 2, session.userId);
+            bindText(db, statement, 3, session.issuedOn.toString());
+            bindInt(db, statement, 4, session.active ? 1 : 0);
+            stepDone(db, statement);
+            reset(statement);
+        }
+        finalize(statement);
+
+        exec(db, "COMMIT;");
+    } catch (...) {
+        exec(db, "ROLLBACK;");
+        throw;
     }
-    writeLines(directory / "users.tsv", users);
 
-    std::vector<std::string> categories;
-    for (const auto& category : backend.transactions().getCategories()) {
-        categories.push_back(json::encodeRow({
-            category.id, category.userId, category.name, category.icon, toString(category.kind),
-            boolToString(category.builtIn), boolToString(category.archived)}));
-    }
-    writeLines(directory / "categories.tsv", categories);
-
-    std::vector<std::string> transactions;
-    for (const auto& transaction : backend.transactions().allTransactions()) {
-        transactions.push_back(json::encodeRow({
-            transaction.id, transaction.userId, transaction.title, transaction.description, transaction.categoryId,
-            toString(transaction.type), std::to_string(transaction.amount), transaction.date.toString(),
-            transaction.merchant, json::encodeList(transaction.tags)}));
-    }
-    writeLines(directory / "transactions.tsv", transactions);
-
-    std::vector<std::string> budgets;
-    for (const auto& budget : backend.budgets().allBudgets()) {
-        budgets.push_back(json::encodeRow({
-            budget.id, budget.userId, budget.categoryId, std::to_string(budget.period.year),
-            std::to_string(budget.period.month), std::to_string(budget.limit)}));
-    }
-    writeLines(directory / "budgets.tsv", budgets);
-
-    std::vector<std::string> savingsEntries;
-    for (const auto& entry : backend.savings().allEntries()) {
-        savingsEntries.push_back(json::encodeRow({
-            entry.id, entry.userId, toString(entry.type), std::to_string(entry.amount), entry.date.toString(), entry.note}));
-    }
-    writeLines(directory / "savings_entries.tsv", savingsEntries);
-
-    std::vector<std::string> savingsGoals;
-    for (const auto& goal : backend.savings().allGoals()) {
-        savingsGoals.push_back(json::encodeRow({
-            goal.id, goal.userId, std::to_string(goal.monthlyTarget),
-            std::to_string(goal.longTermTarget), goal.targetDate.toString()}));
-    }
-    writeLines(directory / "savings_goals.tsv", savingsGoals);
-
-    std::vector<std::string> investmentRows;
-    for (const auto& investment : backend.savings().allInvestments()) {
-        investmentRows.push_back(json::encodeRow({
-            investment.id, investment.userId, investment.assetName, investment.symbol, toString(investment.type),
-            std::to_string(investment.quantity), std::to_string(investment.buyRate),
-            std::to_string(investment.currentRate), investment.purchaseDate.toString()}));
-    }
-    writeLines(directory / "investments.tsv", investmentRows);
-
-    std::vector<std::string> goals;
-    for (const auto& goal : backend.goals().allGoals()) {
-        goals.push_back(json::encodeRow({
-            goal.id, goal.userId, goal.title, goal.description, std::to_string(goal.targetAmount),
-            std::to_string(goal.currentAmount), goal.targetDate.toString(), boolToString(goal.completed)}));
-    }
-    writeLines(directory / "goals.tsv", goals);
-
-    std::vector<std::string> sessions;
-    for (const auto& session : backend.sessions().allSessions()) {
-        sessions.push_back(json::encodeRow({
-            session.token, session.userId, session.issuedOn.toString(), boolToString(session.active)}));
-    }
-    writeLines(directory / "sessions.tsv", sessions);
-
-    std::vector<std::string> receipts;
+    vector<string> receipts;
     for (const auto& receipt : backend.receipts().allReceipts()) {
         receipts.push_back(json::encodeRow({
             receipt.id, receipt.userId, receipt.fileName, receipt.rawText,
-            toString(receipt.status), receipt.uploadedAt.toString()}));
+            toString(receipt.status), receipt.uploadedAt.toString(),
+        }));
     }
-    writeLines(directory / "receipts.tsv", receipts);
 
-    std::vector<std::string> parsedReceipts;
+    vector<string> parsedReceipts;
     for (const auto& parsed : backend.receipts().allParsedReceipts()) {
         parsedReceipts.push_back(json::encodeRow({
             parsed.receiptId, parsed.merchant, optionalDate(parsed.transactionDate),
             optionalAmount(parsed.amount), parsed.suggestedCategoryId, parsed.confidenceNotes,
-            json::encodeList(parsed.extractedLines)}));
+            json::encodeList(parsed.extractedLines),
+        }));
     }
-    writeLines(directory / "parsed_receipts.tsv", parsedReceipts);
 
-    std::vector<std::string> pantryItems;
+    vector<string> pantryItems;
     for (const auto& item : backend.shopping().allPantryItems()) {
         pantryItems.push_back(json::encodeRow({
-            item.id, item.userId, item.name, item.unit, std::to_string(item.quantity),
-            std::to_string(item.lowStockThreshold), item.updatedAt.toString()}));
+            item.id, item.userId, item.name, item.unit, to_string(item.quantity),
+            to_string(item.lowStockThreshold), item.updatedAt.toString(),
+        }));
     }
-    writeLines(directory / "pantry.tsv", pantryItems);
 
-    std::vector<std::string> shoppingItems;
+    vector<string> shoppingItems;
     for (const auto& item : backend.shopping().allShoppingItems()) {
         shoppingItems.push_back(json::encodeRow({
-            item.id, item.userId, item.name, item.category, std::to_string(item.plannedQuantity),
-            item.unit, boolToString(item.purchased), item.createdAt.toString()}));
+            item.id, item.userId, item.name, item.category, to_string(item.plannedQuantity),
+            item.unit, boolToString(item.purchased), item.createdAt.toString(),
+        }));
     }
-    writeLines(directory / "shopping.tsv", shoppingItems);
+
+    writeSidecarJson(sidecarPath(directory), receipts, parsedReceipts, pantryItems, shoppingItems);
 }
 
+// Loads the backend using SQLite for core data and JSON for flexible side data.
 void BackendStore::load(core::managers::FinanceTrackerBackend& backend,
-                        const std::filesystem::path& directory) const {
-    std::vector<core::models::User> users;
-    for (const auto& line : readLines(directory / "users.tsv")) {
-        const auto fields = json::decodeRow(line);
-        if (fields.size() < 7) continue;
-        users.push_back(core::models::User {
-            .id = fields[0],
-            .fullName = fields[1],
-            .email = fields[2],
-            .phone = fields[3],
-            .gender = fields[4],
-            .passwordHash = fields[5],
-            .createdAt = core::models::Date::fromString(fields[6]),
-        });
-    }
-    backend.auth().loadUsers(std::move(users));
+                        const filesystem::path& directory) const {
+    const auto dbFile = databasePath(directory);
+    if (filesystem::exists(dbFile)) {
+        SqliteConnection connection(dbFile);
+        sqlite3* db = connection.get();
+        ensureSchema(db);
 
-    std::vector<core::models::Category> categories;
-    for (const auto& line : readLines(directory / "categories.tsv")) {
-        const auto fields = json::decodeRow(line);
-        if (fields.size() < 7) continue;
-        categories.push_back(core::models::Category {
-            .id = fields[0],
-            .userId = fields[1],
-            .name = fields[2],
-            .icon = fields[3],
-            .kind = toCategoryKind(fields[4]),
-            .builtIn = toBool(fields[5]),
-            .archived = toBool(fields[6]),
-        });
+        vector<core::models::User> users;
+        sqlite3_stmt* statement = prepare(
+            db,
+            "SELECT id, full_name, email, phone, gender, password_hash, created_at FROM users;");
+        while (sqlite3_step(statement) == SQLITE_ROW) {
+            users.push_back(core::models::User {
+                .id = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
+                .fullName = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
+                .email = reinterpret_cast<const char*>(sqlite3_column_text(statement, 2)),
+                .phone = reinterpret_cast<const char*>(sqlite3_column_text(statement, 3)),
+                .gender = reinterpret_cast<const char*>(sqlite3_column_text(statement, 4)),
+                .passwordHash = reinterpret_cast<const char*>(sqlite3_column_text(statement, 5)),
+                .createdAt = core::models::Date::fromString(reinterpret_cast<const char*>(sqlite3_column_text(statement, 6))),
+            });
+        }
+        finalize(statement);
+        backend.auth().loadUsers(move(users));
+
+        vector<core::models::Category> categories;
+        statement = prepare(db, "SELECT id, user_id, name, icon, kind, built_in, archived FROM categories;");
+        while (sqlite3_step(statement) == SQLITE_ROW) {
+            categories.push_back(core::models::Category {
+                .id = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
+                .userId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
+                .name = reinterpret_cast<const char*>(sqlite3_column_text(statement, 2)),
+                .icon = reinterpret_cast<const char*>(sqlite3_column_text(statement, 3)),
+                .kind = toCategoryKind(reinterpret_cast<const char*>(sqlite3_column_text(statement, 4))),
+                .builtIn = sqlite3_column_int(statement, 5) != 0,
+                .archived = sqlite3_column_int(statement, 6) != 0,
+            });
+        }
+        finalize(statement);
+
+        vector<core::models::Transaction> transactions;
+        statement = prepare(db, "SELECT id, user_id, title, description, category_id, type, amount, date, merchant, tags FROM transactions;");
+        while (sqlite3_step(statement) == SQLITE_ROW) {
+            transactions.push_back(core::models::Transaction {
+                .id = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
+                .userId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
+                .title = reinterpret_cast<const char*>(sqlite3_column_text(statement, 2)),
+                .description = reinterpret_cast<const char*>(sqlite3_column_text(statement, 3)),
+                .categoryId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 4)),
+                .type = toTransactionType(reinterpret_cast<const char*>(sqlite3_column_text(statement, 5))),
+                .amount = sqlite3_column_double(statement, 6),
+                .date = core::models::Date::fromString(reinterpret_cast<const char*>(sqlite3_column_text(statement, 7))),
+                .merchant = reinterpret_cast<const char*>(sqlite3_column_text(statement, 8)),
+                .tags = json::decodeList(reinterpret_cast<const char*>(sqlite3_column_text(statement, 9))),
+            });
+        }
+        finalize(statement);
+        if (!categories.empty() || !transactions.empty()) {
+            backend.transactions().loadState(move(categories), move(transactions));
+        }
+
+        vector<core::models::Budget> budgets;
+        statement = prepare(db, "SELECT id, user_id, category_id, year, month, limit_amount FROM budgets;");
+        while (sqlite3_step(statement) == SQLITE_ROW) {
+            budgets.push_back(core::models::Budget {
+                .id = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
+                .userId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
+                .categoryId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 2)),
+                .period = core::models::YearMonth {sqlite3_column_int(statement, 3), sqlite3_column_int(statement, 4)},
+                .limit = sqlite3_column_double(statement, 5),
+            });
+        }
+        finalize(statement);
+        backend.budgets().loadBudgets(move(budgets));
+
+        vector<core::models::SavingsEntry> savingsEntries;
+        statement = prepare(db, "SELECT id, user_id, type, amount, date, note FROM savings_entries;");
+        while (sqlite3_step(statement) == SQLITE_ROW) {
+            savingsEntries.push_back(core::models::SavingsEntry {
+                .id = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
+                .userId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
+                .type = toSavingsEntryType(reinterpret_cast<const char*>(sqlite3_column_text(statement, 2))),
+                .amount = sqlite3_column_double(statement, 3),
+                .date = core::models::Date::fromString(reinterpret_cast<const char*>(sqlite3_column_text(statement, 4))),
+                .note = reinterpret_cast<const char*>(sqlite3_column_text(statement, 5)),
+            });
+        }
+        finalize(statement);
+
+        vector<core::models::SavingsGoal> savingsGoals;
+        statement = prepare(db, "SELECT id, user_id, monthly_target, long_term_target, target_date FROM savings_goals;");
+        while (sqlite3_step(statement) == SQLITE_ROW) {
+            savingsGoals.push_back(core::models::SavingsGoal {
+                .id = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
+                .userId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
+                .monthlyTarget = sqlite3_column_double(statement, 2),
+                .longTermTarget = sqlite3_column_double(statement, 3),
+                .targetDate = core::models::Date::fromString(reinterpret_cast<const char*>(sqlite3_column_text(statement, 4))),
+            });
+        }
+        finalize(statement);
+
+        vector<core::models::Investment> investments;
+        statement = prepare(db, "SELECT id, user_id, asset_name, symbol, type, quantity, buy_rate, current_rate, purchase_date FROM investments;");
+        while (sqlite3_step(statement) == SQLITE_ROW) {
+            investments.push_back(core::models::Investment {
+                .id = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
+                .userId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
+                .assetName = reinterpret_cast<const char*>(sqlite3_column_text(statement, 2)),
+                .symbol = reinterpret_cast<const char*>(sqlite3_column_text(statement, 3)),
+                .type = toInvestmentType(reinterpret_cast<const char*>(sqlite3_column_text(statement, 4))),
+                .quantity = sqlite3_column_double(statement, 5),
+                .buyRate = sqlite3_column_double(statement, 6),
+                .currentRate = sqlite3_column_double(statement, 7),
+                .purchaseDate = core::models::Date::fromString(reinterpret_cast<const char*>(sqlite3_column_text(statement, 8))),
+            });
+        }
+        finalize(statement);
+        backend.savings().loadState(move(savingsEntries), move(investments), move(savingsGoals));
+
+        vector<core::models::Goal> goals;
+        statement = prepare(db, "SELECT id, user_id, title, description, target_amount, current_amount, target_date, completed FROM goals;");
+        while (sqlite3_step(statement) == SQLITE_ROW) {
+            goals.push_back(core::models::Goal {
+                .id = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
+                .userId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
+                .title = reinterpret_cast<const char*>(sqlite3_column_text(statement, 2)),
+                .description = reinterpret_cast<const char*>(sqlite3_column_text(statement, 3)),
+                .targetAmount = sqlite3_column_double(statement, 4),
+                .currentAmount = sqlite3_column_double(statement, 5),
+                .targetDate = core::models::Date::fromString(reinterpret_cast<const char*>(sqlite3_column_text(statement, 6))),
+                .completed = sqlite3_column_int(statement, 7) != 0,
+            });
+        }
+        finalize(statement);
+        backend.goals().loadGoals(move(goals));
+
+        vector<core::models::Session> sessions;
+        statement = prepare(db, "SELECT token, user_id, issued_on, active FROM sessions;");
+        while (sqlite3_step(statement) == SQLITE_ROW) {
+            sessions.push_back(core::models::Session {
+                .token = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
+                .userId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
+                .issuedOn = core::models::Date::fromString(reinterpret_cast<const char*>(sqlite3_column_text(statement, 2))),
+                .active = sqlite3_column_int(statement, 3) != 0,
+            });
+        }
+        finalize(statement);
+        backend.sessions().loadSessions(move(sessions));
     }
 
-    std::vector<core::models::Transaction> transactions;
-    for (const auto& line : readLines(directory / "transactions.tsv")) {
-        const auto fields = json::decodeRow(line);
-        if (fields.size() < 10) continue;
-        transactions.push_back(core::models::Transaction {
-            .id = fields[0],
-            .userId = fields[1],
-            .title = fields[2],
-            .description = fields[3],
-            .categoryId = fields[4],
-            .type = toTransactionType(fields[5]),
-            .amount = toDouble(fields[6]),
-            .date = core::models::Date::fromString(fields[7]),
-            .merchant = fields[8],
-            .tags = json::decodeList(fields[9]),
-        });
-    }
-    if (!categories.empty() || !transactions.empty()) {
-        backend.transactions().loadState(std::move(categories), std::move(transactions));
+    const auto sidecarContent = readSidecarJson(sidecarPath(directory));
+    if (sidecarContent.empty()) {
+        return;
     }
 
-    std::vector<core::models::Budget> budgets;
-    for (const auto& line : readLines(directory / "budgets.tsv")) {
-        const auto fields = json::decodeRow(line);
-        if (fields.size() < 6) continue;
-        budgets.push_back(core::models::Budget {
-            .id = fields[0],
-            .userId = fields[1],
-            .categoryId = fields[2],
-            .period = core::models::YearMonth {toInt(fields[3]), toInt(fields[4])},
-            .limit = toDouble(fields[5]),
-        });
-    }
-    backend.budgets().loadBudgets(std::move(budgets));
-
-    std::vector<core::models::SavingsEntry> savingsEntries;
-    for (const auto& line : readLines(directory / "savings_entries.tsv")) {
-        const auto fields = json::decodeRow(line);
-        if (fields.size() < 6) continue;
-        savingsEntries.push_back(core::models::SavingsEntry {
-            .id = fields[0],
-            .userId = fields[1],
-            .type = toSavingsEntryType(fields[2]),
-            .amount = toDouble(fields[3]),
-            .date = core::models::Date::fromString(fields[4]),
-            .note = fields[5],
-        });
-    }
-
-    std::vector<core::models::Investment> investments;
-    for (const auto& line : readLines(directory / "investments.tsv")) {
-        const auto fields = json::decodeRow(line);
-        if (fields.size() < 9) continue;
-        investments.push_back(core::models::Investment {
-            .id = fields[0],
-            .userId = fields[1],
-            .assetName = fields[2],
-            .symbol = fields[3],
-            .type = toInvestmentType(fields[4]),
-            .quantity = toDouble(fields[5]),
-            .buyRate = toDouble(fields[6]),
-            .currentRate = toDouble(fields[7]),
-            .purchaseDate = core::models::Date::fromString(fields[8]),
-        });
-    }
-
-    std::vector<core::models::SavingsGoal> savingsGoals;
-    for (const auto& line : readLines(directory / "savings_goals.tsv")) {
-        const auto fields = json::decodeRow(line);
-        if (fields.size() < 5) continue;
-        savingsGoals.push_back(core::models::SavingsGoal {
-            .id = fields[0],
-            .userId = fields[1],
-            .monthlyTarget = toDouble(fields[2]),
-            .longTermTarget = toDouble(fields[3]),
-            .targetDate = core::models::Date::fromString(fields[4]),
-        });
-    }
-    backend.savings().loadState(std::move(savingsEntries), std::move(investments), std::move(savingsGoals));
-
-    std::vector<core::models::Goal> goals;
-    for (const auto& line : readLines(directory / "goals.tsv")) {
-        const auto fields = json::decodeRow(line);
-        if (fields.size() < 8) continue;
-        goals.push_back(core::models::Goal {
-            .id = fields[0],
-            .userId = fields[1],
-            .title = fields[2],
-            .description = fields[3],
-            .targetAmount = toDouble(fields[4]),
-            .currentAmount = toDouble(fields[5]),
-            .targetDate = core::models::Date::fromString(fields[6]),
-            .completed = toBool(fields[7]),
-        });
-    }
-    backend.goals().loadGoals(std::move(goals));
-
-    std::vector<core::models::Session> sessions;
-    for (const auto& line : readLines(directory / "sessions.tsv")) {
-        const auto fields = json::decodeRow(line);
-        if (fields.size() < 4) continue;
-        sessions.push_back(core::models::Session {
-            .token = fields[0],
-            .userId = fields[1],
-            .issuedOn = core::models::Date::fromString(fields[2]),
-            .active = toBool(fields[3]),
-        });
-    }
-    backend.sessions().loadSessions(std::move(sessions));
-
-    std::vector<core::models::ReceiptDocument> receipts;
-    for (const auto& line : readLines(directory / "receipts.tsv")) {
-        const auto fields = json::decodeRow(line);
+    vector<core::models::ReceiptDocument> receipts;
+    for (const auto& row : parseStringArray(sidecarContent, "receipts")) {
+        const auto fields = json::decodeRow(row);
         if (fields.size() < 6) continue;
         receipts.push_back(core::models::ReceiptDocument {
             .id = fields[0],
@@ -426,9 +886,9 @@ void BackendStore::load(core::managers::FinanceTrackerBackend& backend,
         });
     }
 
-    std::vector<core::models::ReceiptParseResult> parsedReceipts;
-    for (const auto& line : readLines(directory / "parsed_receipts.tsv")) {
-        const auto fields = json::decodeRow(line);
+    vector<core::models::ReceiptParseResult> parsedReceipts;
+    for (const auto& row : parseStringArray(sidecarContent, "parsedReceipts")) {
+        const auto fields = json::decodeRow(row);
         if (fields.size() < 7) continue;
         parsedReceipts.push_back(core::models::ReceiptParseResult {
             .receiptId = fields[0],
@@ -440,39 +900,39 @@ void BackendStore::load(core::managers::FinanceTrackerBackend& backend,
             .extractedLines = json::decodeList(fields[6]),
         });
     }
-    backend.receipts().loadState(std::move(receipts), std::move(parsedReceipts));
+    backend.receipts().loadState(move(receipts), move(parsedReceipts));
 
-    std::vector<core::models::PantryItem> pantryItems;
-    for (const auto& line : readLines(directory / "pantry.tsv")) {
-        const auto fields = json::decodeRow(line);
+    vector<core::models::PantryItem> pantryItems;
+    for (const auto& row : parseStringArray(sidecarContent, "pantryItems")) {
+        const auto fields = json::decodeRow(row);
         if (fields.size() < 7) continue;
         pantryItems.push_back(core::models::PantryItem {
             .id = fields[0],
             .userId = fields[1],
             .name = fields[2],
             .unit = fields[3],
-            .quantity = toDouble(fields[4]),
-            .lowStockThreshold = toDouble(fields[5]),
+            .quantity = stod(fields[4]),
+            .lowStockThreshold = stod(fields[5]),
             .updatedAt = core::models::Date::fromString(fields[6]),
         });
     }
 
-    std::vector<core::models::ShoppingItem> shoppingItems;
-    for (const auto& line : readLines(directory / "shopping.tsv")) {
-        const auto fields = json::decodeRow(line);
+    vector<core::models::ShoppingItem> shoppingItems;
+    for (const auto& row : parseStringArray(sidecarContent, "shoppingItems")) {
+        const auto fields = json::decodeRow(row);
         if (fields.size() < 8) continue;
         shoppingItems.push_back(core::models::ShoppingItem {
             .id = fields[0],
             .userId = fields[1],
             .name = fields[2],
             .category = fields[3],
-            .plannedQuantity = toDouble(fields[4]),
+            .plannedQuantity = stod(fields[4]),
             .unit = fields[5],
             .purchased = toBool(fields[6]),
             .createdAt = core::models::Date::fromString(fields[7]),
         });
     }
-    backend.shopping().loadState(std::move(pantryItems), std::move(shoppingItems));
+    backend.shopping().loadState(move(pantryItems), move(shoppingItems));
 }
 
 }  // namespace finsight::data::storage

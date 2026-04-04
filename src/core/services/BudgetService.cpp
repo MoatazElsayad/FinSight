@@ -7,8 +7,11 @@
 #include <sstream>
 #include <stdexcept>
 
+using namespace std;
+
 namespace finsight::core::services {
 
+// Creates and stores a new monthly budget.
 models::Budget BudgetService::createBudget(const std::string& userId,
                                            const std::string& categoryId,
                                            const models::YearMonth& period,
@@ -27,6 +30,7 @@ models::Budget BudgetService::createBudget(const std::string& userId,
     return budget;
 }
 
+// Updates one stored budget.
 models::Budget BudgetService::updateBudget(const std::string& userId,
                                            const std::string& budgetId,
                                            const models::Budget& updatedBudget) {
@@ -41,6 +45,7 @@ models::Budget BudgetService::updateBudget(const std::string& userId,
     throw std::out_of_range("Budget not found.");
 }
 
+// Deletes a budget by id.
 void BudgetService::deleteBudget(const std::string& userId, const std::string& budgetId) {
     auto iterator = std::find_if(budgets_.begin(), budgets_.end(), [&](const auto& budget) {
         return budget.id == budgetId && budget.userId == userId;
@@ -51,6 +56,7 @@ void BudgetService::deleteBudget(const std::string& userId, const std::string& b
     budgets_.erase(iterator);
 }
 
+// Copies all budgets from one month into another month.
 void BudgetService::copyBudgets(const std::string& userId,
                                 const models::YearMonth& from,
                                 const models::YearMonth& to) {
@@ -60,6 +66,7 @@ void BudgetService::copyBudgets(const std::string& userId,
     }
 }
 
+// Returns all budgets for the selected user and month.
 std::vector<models::Budget> BudgetService::listBudgets(const std::string& userId,
                                                        const models::YearMonth& period) const {
     std::vector<models::Budget> result;
@@ -71,6 +78,7 @@ std::vector<models::Budget> BudgetService::listBudgets(const std::string& userId
     return result;
 }
 
+// Builds spent/remaining summaries for every budget in a month.
 std::vector<models::BudgetStatus> BudgetService::summarizeBudgets(
     const std::string& userId,
     const models::YearMonth& period,
@@ -90,10 +98,12 @@ std::vector<models::BudgetStatus> BudgetService::summarizeBudgets(
     return result;
 }
 
+// Returns every stored budget.
 std::vector<models::Budget> BudgetService::allBudgets() const {
     return budgets_;
 }
 
+// Restores budgets from persisted state and resets id generation.
 void BudgetService::loadBudgets(std::vector<models::Budget> budgets) {
     budgets_ = std::move(budgets);
     std::size_t maxId = 0;
@@ -107,6 +117,7 @@ void BudgetService::loadBudgets(std::vector<models::Budget> budgets) {
     nextBudgetId_ = maxId + 1;
 }
 
+// Builds the next budget id string.
 std::string BudgetService::nextId() {
     std::ostringstream stream;
     stream << "bdg-" << nextBudgetId_++;

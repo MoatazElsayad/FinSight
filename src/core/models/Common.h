@@ -9,8 +9,11 @@
 #include <stdexcept>
 #include <string>
 
+using namespace std;
+
 namespace finsight::core::models {
 
+// Stores a simple calendar date without time information.
 struct Date {
     int year {1970};
     int month {1};
@@ -43,6 +46,7 @@ struct Date {
     }
 };
 
+// Stores a year and month pair for monthly summaries.
 struct YearMonth {
     int year {1970};
     int month {1};
@@ -50,6 +54,7 @@ struct YearMonth {
     [[nodiscard]] auto operator<=>(const YearMonth&) const = default;
 };
 
+// Converts a string to lowercase for case-insensitive comparisons.
 inline std::string toLower(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
         return static_cast<char>(std::tolower(ch));
@@ -57,10 +62,12 @@ inline std::string toLower(std::string value) {
     return value;
 }
 
+// Checks whether one string contains another without case sensitivity.
 inline bool containsCaseInsensitive(const std::string& text, const std::string& fragment) {
     return toLower(text).find(toLower(fragment)) != std::string::npos;
 }
 
+// Checks whether a date belongs to a specific month.
 inline bool inMonth(const Date& date, const YearMonth& period) {
     return date.year == period.year && date.month == period.month;
 }

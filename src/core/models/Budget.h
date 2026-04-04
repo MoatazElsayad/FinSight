@@ -4,8 +4,11 @@
 
 #include <string>
 
+using namespace std;
+
 namespace finsight::core::models {
 
+// Stores a monthly spending budget for one category.
 struct Budget {
     std::string id;
     std::string userId;
@@ -14,6 +17,7 @@ struct Budget {
     double limit {0.0};
 };
 
+// Summarizes how a budget is performing against actual spending.
 struct BudgetStatus {
     Budget budget;
     double spent {0.0};

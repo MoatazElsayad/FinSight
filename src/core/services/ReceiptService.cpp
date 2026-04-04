@@ -7,8 +7,11 @@
 #include <sstream>
 #include <stdexcept>
 
+using namespace std;
+
 namespace finsight::core::services {
 
+// Stores a newly uploaded receipt document.
 models::ReceiptDocument ReceiptService::uploadReceipt(const std::string& userId,
                                                       const std::string& fileName,
                                                       const std::string& rawText,
@@ -29,6 +32,7 @@ models::ReceiptDocument ReceiptService::uploadReceipt(const std::string& userId,
     return receipt;
 }
 
+// Returns all receipts owned by one user.
 std::vector<models::ReceiptDocument> ReceiptService::listReceipts(const std::string& userId) const {
     std::vector<models::ReceiptDocument> result;
     for (const auto& receipt : receipts_) {
@@ -39,6 +43,7 @@ std::vector<models::ReceiptDocument> ReceiptService::listReceipts(const std::str
     return result;
 }
 
+// Parses receipt text into a lightweight structured result.
 models::ReceiptParseResult ReceiptService::parseReceipt(const std::string& userId,
                                                         const std::string& receiptId,
                                                         const TransactionService& transactionService) {
@@ -84,6 +89,7 @@ models::ReceiptParseResult ReceiptService::parseReceipt(const std::string& userI
     return result;
 }
 
+// Converts a confirmed receipt into a saved transaction.
 models::Transaction ReceiptService::confirmReceiptAsTransaction(
     const std::string& userId,
     const models::ReceiptConfirmation& confirmation,
@@ -110,14 +116,17 @@ models::Transaction ReceiptService::confirmReceiptAsTransaction(
     return transactionService.addTransaction(transaction);
 }
 
+// Returns every stored receipt document.
 std::vector<models::ReceiptDocument> ReceiptService::allReceipts() const {
     return receipts_;
 }
 
+// Returns every stored parsed receipt result.
 std::vector<models::ReceiptParseResult> ReceiptService::allParsedReceipts() const {
     return parsedReceipts_;
 }
 
+// Restores receipt state from persisted data.
 void ReceiptService::loadState(std::vector<models::ReceiptDocument> receipts,
                                std::vector<models::ReceiptParseResult> parsedReceipts) {
     receipts_ = std::move(receipts);
@@ -134,12 +143,14 @@ void ReceiptService::loadState(std::vector<models::ReceiptDocument> receipts,
     nextReceiptId_ = maxId + 1;
 }
 
+// Builds the next receipt id string.
 std::string ReceiptService::nextReceiptId() {
     std::ostringstream stream;
     stream << "receipt-" << nextReceiptId_++;
     return stream.str();
 }
 
+// Splits raw receipt text into non-empty lines.
 std::vector<std::string> ReceiptService::splitLines(const std::string& text) {
     std::vector<std::string> lines;
     std::istringstream stream(text);
@@ -152,6 +163,7 @@ std::vector<std::string> ReceiptService::splitLines(const std::string& text) {
     return lines;
 }
 
+// Extracts the first amount-like value from receipt lines.
 std::optional<double> ReceiptService::firstAmount(const std::vector<std::string>& lines) {
     const std::regex amountPattern(R"((\d+(?:\.\d{1,2})?))");
     for (const auto& line : lines) {
@@ -166,6 +178,7 @@ std::optional<double> ReceiptService::firstAmount(const std::vector<std::string>
     return std::nullopt;
 }
 
+// Extracts the first date-like value from receipt lines.
 std::optional<models::Date> ReceiptService::firstDate(const std::vector<std::string>& lines) {
     const std::regex datePattern(R"((\d{4}-\d{2}-\d{2}))");
     for (const auto& line : lines) {
@@ -180,6 +193,7 @@ std::optional<models::Date> ReceiptService::firstDate(const std::vector<std::str
     return std::nullopt;
 }
 
+// Uses the first line as a simple merchant guess.
 std::string ReceiptService::firstMerchant(const std::vector<std::string>& lines) {
     return lines.empty() ? std::string {} : lines.front();
 }

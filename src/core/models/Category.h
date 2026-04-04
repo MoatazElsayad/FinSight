@@ -2,8 +2,11 @@
 
 #include <string>
 
+using namespace std;
+
 namespace finsight::core::models {
 
+// Describes the finance area a category belongs to.
 enum class CategoryKind {
     Income,
     Expense,
@@ -11,6 +14,7 @@ enum class CategoryKind {
     Investment
 };
 
+// Represents a built-in or user-created category.
 struct Category {
     std::string id;
     std::string userId;

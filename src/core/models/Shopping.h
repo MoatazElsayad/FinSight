@@ -5,8 +5,11 @@
 #include <string>
 #include <vector>
 
+using namespace std;
+
 namespace finsight::core::models {
 
+// Stores one pantry item and its current stock level.
 struct PantryItem {
     std::string id;
     std::string userId;
@@ -17,6 +20,7 @@ struct PantryItem {
     Date updatedAt;
 };
 
+// Stores one planned shopping list entry.
 struct ShoppingItem {
     std::string id;
     std::string userId;
@@ -28,6 +32,7 @@ struct ShoppingItem {
     Date createdAt;
 };
 
+// Summarizes the shopping and pantry state for a user.
 struct ShoppingSnapshot {
     std::vector<PantryItem> pantryItems;
     std::vector<ShoppingItem> shoppingItems;

@@ -3,8 +3,11 @@
 #include <regex>
 #include <sstream>
 
+using namespace std;
+
 namespace finsight::core::services {
 
+// Starts and stores a new user session.
 models::Session SessionService::startSession(const std::string& userId, const models::Date& issuedOn) {
     models::Session session {
         .token = nextToken(),
@@ -16,6 +19,7 @@ models::Session SessionService::startSession(const std::string& userId, const mo
     return session;
 }
 
+// Marks a stored session as inactive.
 void SessionService::endSession(const std::string& token) {
     for (auto& session : sessions_) {
         if (session.token == token) {
@@ -25,6 +29,7 @@ void SessionService::endSession(const std::string& token) {
     }
 }
 
+// Returns one session by token if it exists.
 std::optional<models::Session> SessionService::getSession(const std::string& token) const {
     for (const auto& session : sessions_) {
         if (session.token == token) {
@@ -34,6 +39,7 @@ std::optional<models::Session> SessionService::getSession(const std::string& tok
     return std::nullopt;
 }
 
+// Returns all sessions belonging to one user.
 std::vector<models::Session> SessionService::sessionsForUser(const std::string& userId) const {
     std::vector<models::Session> result;
     for (const auto& session : sessions_) {
@@ -44,10 +50,12 @@ std::vector<models::Session> SessionService::sessionsForUser(const std::string& 
     return result;
 }
 
+// Returns every stored session.
 std::vector<models::Session> SessionService::allSessions() const {
     return sessions_;
 }
 
+// Restores sessions from persisted state and resets token generation.
 void SessionService::loadSessions(std::vector<models::Session> sessions) {
     sessions_ = std::move(sessions);
     std::size_t maxId = 0;
@@ -61,6 +69,7 @@ void SessionService::loadSessions(std::vector<models::Session> sessions) {
     nextSessionId_ = maxId + 1;
 }
 
+// Builds the next session token string.
 std::string SessionService::nextToken() {
     std::ostringstream stream;
     stream << "session-" << nextSessionId_++;

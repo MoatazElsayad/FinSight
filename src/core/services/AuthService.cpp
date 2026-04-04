@@ -7,8 +7,11 @@
 #include <sstream>
 #include <stdexcept>
 
+using namespace std;
+
 namespace finsight::core::services {
 
+// Registers a new user after checking for duplicate emails.
 models::User AuthService::registerUser(const std::string& fullName,
                                        const std::string& email,
                                        const std::string& phone,
@@ -37,6 +40,7 @@ models::User AuthService::registerUser(const std::string& fullName,
     return user;
 }
 
+// Tries to authenticate a user by email and password.
 std::optional<models::User> AuthService::login(const std::string& email,
                                                const std::string& password) const {
     const auto hashedPassword = hashPassword(password);
@@ -49,6 +53,7 @@ std::optional<models::User> AuthService::login(const std::string& email,
     return std::nullopt;
 }
 
+// Updates the editable profile fields for one stored user.
 models::User AuthService::updateProfile(const std::string& userId,
                                         const std::string& fullName,
                                         const std::string& phone,
@@ -64,6 +69,7 @@ models::User AuthService::updateProfile(const std::string& userId,
     throw std::out_of_range("User not found.");
 }
 
+// Returns a stored user by id.
 const models::User& AuthService::getUser(const std::string& userId) const {
     for (const auto& user : users_) {
         if (user.id == userId) {
@@ -73,10 +79,12 @@ const models::User& AuthService::getUser(const std::string& userId) const {
     throw std::out_of_range("User not found.");
 }
 
+// Returns all stored users.
 std::vector<models::User> AuthService::listUsers() const {
     return users_;
 }
 
+// Restores users from persisted state and resets id generation.
 void AuthService::loadUsers(std::vector<models::User> users) {
     users_ = std::move(users);
     std::size_t maxId = 0;
@@ -90,12 +98,14 @@ void AuthService::loadUsers(std::vector<models::User> users) {
     nextUserId_ = maxId + 1;
 }
 
+// Builds the next user id string.
 std::string AuthService::nextId() {
     std::ostringstream stream;
     stream << "usr-" << nextUserId_++;
     return stream.str();
 }
 
+// Creates a simple hash string for a password.
 std::string AuthService::hashPassword(const std::string& password) {
     return std::to_string(std::hash<std::string> {}(password));
 }

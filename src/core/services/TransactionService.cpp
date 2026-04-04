@@ -5,10 +5,13 @@
 #include <sstream>
 #include <stdexcept>
 
+using namespace std;
+
 namespace finsight::core::services {
 
 namespace {
 
+// Checks whether a transaction matches the requested filter values.
 bool filterMatches(const models::Transaction& transaction,
                    const models::TransactionFilter& filter) {
     if (filter.from && transaction.date < *filter.from) {
@@ -34,20 +37,30 @@ bool filterMatches(const models::Transaction& transaction,
 
 }  // namespace
 
+// Seeds the service with the built-in categories used by the app.
 TransactionService::TransactionService() {
+    // Seed the common income categories users are expected to pick from.
     createCategory("", "Salary", models::CategoryKind::Income, "briefcase", true);
     createCategory("", "Freelance", models::CategoryKind::Income, "laptop", true);
+    createCategory("", "Allowance", models::CategoryKind::Income, "wallet", true);
+
+    // Seed the common expense categories used by the transactions page.
     createCategory("", "Food", models::CategoryKind::Expense, "fork-knife", true);
+    createCategory("", "Shopping", models::CategoryKind::Expense, "shopping-bag", true);
     createCategory("", "Transport", models::CategoryKind::Expense, "car", true);
     createCategory("", "Bills", models::CategoryKind::Expense, "receipt", true);
+
+    // Seed savings and investment categories used by the rest of the backend.
     createCategory("", "Savings", models::CategoryKind::Savings, "piggy-bank", true);
     createCategory("", "Investments", models::CategoryKind::Investment, "chart-line", true);
 }
 
+// Returns every stored category.
 const std::vector<models::Category>& TransactionService::getCategories() const {
     return categories_;
 }
 
+// Returns all categories visible to one user.
 std::vector<models::Category> TransactionService::getCategoriesForUser(const std::string& userId) const {
     std::vector<models::Category> result;
     for (const auto& category : categories_) {
@@ -58,6 +71,7 @@ std::vector<models::Category> TransactionService::getCategoriesForUser(const std
     return result;
 }
 
+// Creates and stores a new category.
 models::Category TransactionService::createCategory(const std::string& userId,
                                                     const std::string& name,
                                                     models::CategoryKind kind,
@@ -79,6 +93,7 @@ models::Category TransactionService::createCategory(const std::string& userId,
     return category;
 }
 
+// Deletes one custom category owned by a user.
 void TransactionService::deleteCategory(const std::string& userId, const std::string& categoryId) {
     auto iterator = std::find_if(categories_.begin(), categories_.end(), [&](const auto& category) {
         return category.id == categoryId && !category.builtIn && category.userId == userId;
@@ -89,6 +104,7 @@ void TransactionService::deleteCategory(const std::string& userId, const std::st
     categories_.erase(iterator);
 }
 
+// Validates and stores a new transaction.
 models::Transaction TransactionService::addTransaction(models::Transaction transaction) {
     ensureTransactionIsValid(transaction);
     transaction.id = nextId("txn");
@@ -96,6 +112,7 @@ models::Transaction TransactionService::addTransaction(models::Transaction trans
     return transaction;
 }
 
+// Replaces one stored transaction with updated values.
 models::Transaction TransactionService::updateTransaction(const std::string& userId,
                                                           const std::string& transactionId,
                                                           const models::Transaction& updated) {
@@ -112,6 +129,7 @@ models::Transaction TransactionService::updateTransaction(const std::string& use
     throw std::out_of_range("Transaction not found.");
 }
 
+// Deletes one transaction by id.
 void TransactionService::deleteTransaction(const std::string& userId, const std::string& transactionId) {
     auto iterator = std::find_if(transactions_.begin(), transactions_.end(), [&](const auto& transaction) {
         return transaction.id == transactionId && transaction.userId == userId;
@@ -122,6 +140,7 @@ void TransactionService::deleteTransaction(const std::string& userId, const std:
     transactions_.erase(iterator);
 }
 
+// Deletes a list of transactions in one pass.
 void TransactionService::bulkDeleteTransactions(const std::string& userId,
                                                 const std::vector<std::string>& transactionIds) {
     transactions_.erase(std::remove_if(transactions_.begin(),
@@ -135,6 +154,7 @@ void TransactionService::bulkDeleteTransactions(const std::string& userId,
                         transactions_.end());
 }
 
+// Returns all transactions owned by a user in descending date order.
 std::vector<models::Transaction> TransactionService::listTransactions(const std::string& userId) const {
     std::vector<models::Transaction> result;
     for (const auto& transaction : transactions_) {
@@ -148,6 +168,7 @@ std::vector<models::Transaction> TransactionService::listTransactions(const std:
     return result;
 }
 
+// Returns filtered transactions in descending date order.
 std::vector<models::Transaction> TransactionService::filterTransactions(
     const std::string& userId,
     const models::TransactionFilter& filter) const {
@@ -163,6 +184,7 @@ std::vector<models::Transaction> TransactionService::filterTransactions(
     return result;
 }
 
+// Sums one transaction type for a selected month.
 double TransactionService::sumTransactions(const std::string& userId,
                                            models::TransactionType type,
                                            const models::YearMonth& period) const {
@@ -177,6 +199,7 @@ double TransactionService::sumTransactions(const std::string& userId,
     return total;
 }
 
+// Calculates total expense spending for one category in a month.
 double TransactionService::spentForCategory(const std::string& userId,
                                             const std::string& categoryId,
                                             const models::YearMonth& period) const {
@@ -192,6 +215,7 @@ double TransactionService::spentForCategory(const std::string& userId,
     return total;
 }
 
+// Returns one category by id or throws if missing.
 const models::Category& TransactionService::requireCategory(const std::string& categoryId) const {
     for (const auto& category : categories_) {
         if (category.id == categoryId) {
@@ -201,10 +225,12 @@ const models::Category& TransactionService::requireCategory(const std::string& c
     throw std::out_of_range("Category not found.");
 }
 
+// Returns every stored transaction.
 std::vector<models::Transaction> TransactionService::allTransactions() const {
     return transactions_;
 }
 
+// Restores categories and transactions from persisted data.
 void TransactionService::loadState(std::vector<models::Category> categories,
                                    std::vector<models::Transaction> transactions) {
     categories_ = std::move(categories);
@@ -233,6 +259,7 @@ void TransactionService::loadState(std::vector<models::Category> categories,
     nextTransactionId_ = maxTransactionId + 1;
 }
 
+// Builds the next category or transaction id string.
 std::string TransactionService::nextId(const std::string& prefix) {
     std::ostringstream stream;
     if (prefix == "cat") {
@@ -243,6 +270,7 @@ std::string TransactionService::nextId(const std::string& prefix) {
     return stream.str();
 }
 
+// Validates the required transaction fields before saving.
 void TransactionService::ensureTransactionIsValid(const models::Transaction& transaction) const {
     if (transaction.userId.empty() || transaction.title.empty() || transaction.amount <= 0.0) {
         throw std::invalid_argument("Transaction requires user, title, and positive amount.");

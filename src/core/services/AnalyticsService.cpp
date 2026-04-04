@@ -8,8 +8,11 @@
 #include <algorithm>
 #include <unordered_map>
 
+using namespace std;
+
 namespace finsight::core::services {
 
+// Builds the combined dashboard data from the finance services.
 DashboardInsights AnalyticsService::buildDashboard(const std::string& userId,
                                                    const models::YearMonth& period,
                                                    const TransactionService& transactionService,

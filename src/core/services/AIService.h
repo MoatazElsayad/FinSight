@@ -2,6 +2,8 @@
 
 #include "../models/AI.h"
 
+using namespace std;
+
 namespace finsight::core::services {
 
 class AnalyticsService;
@@ -13,47 +15,60 @@ class TransactionService;
 
 class AIService {
 public:
+    // Builds the AI service with default provider settings.
     AIService();
 
+    // Replaces the current provider configuration.
     void configure(models::AIProviderConfig config);
+    // Returns the current provider configuration.
     const models::AIProviderConfig& config() const;
 
-    models::AIDashboardInsight generateDashboardInsight(const std::string& userId,
+    // Generates a dashboard summary and recommendations from finance data.
+    models::AIDashboardInsight generateDashboardInsight(const string& userId,
                                                         const models::YearMonth& period,
                                                         const AnalyticsService& analyticsService,
                                                         const TransactionService& transactionService,
                                                         const BudgetService& budgetService,
                                                         const SavingsService& savingsService,
                                                         const GoalService& goalService) const;
-    models::AISavingsInsight analyzeSavings(const std::string& userId,
+    // Generates AI feedback focused on savings progress.
+    models::AISavingsInsight analyzeSavings(const string& userId,
                                             const models::YearMonth& period,
                                             const SavingsService& savingsService) const;
-    models::AIFinanceChatAnswer answerFinanceQuestion(const std::string& userId,
-                                                      const std::string& question,
+    // Answers a finance question using the user's existing data.
+    models::AIFinanceChatAnswer answerFinanceQuestion(const string& userId,
+                                                      const string& question,
                                                       const models::YearMonth& period,
                                                       const AnalyticsService& analyticsService,
                                                       const TransactionService& transactionService,
                                                       const BudgetService& budgetService,
                                                       const SavingsService& savingsService,
                                                       const GoalService& goalService) const;
-    models::AIReceiptSuggestion suggestReceiptTransaction(const std::string& rawText,
-                                                          const std::string& merchantHint = "") const;
+    // Suggests receipt details from raw text before confirmation.
+    models::AIReceiptSuggestion suggestReceiptTransaction(const string& rawText,
+                                                          const string& merchantHint = "") const;
 
 private:
-    models::AIChatResponse runChatCompletion(const std::vector<models::AIMessage>& messages) const;
-    static std::vector<std::string> configuredModels(const models::AIProviderConfig& config);
-    static std::vector<std::string> splitBulletLines(const std::string& text);
-    static std::string buildDashboardContext(const std::string& userId,
+    // Tries the configured model list until one returns a usable response.
+    models::AIChatResponse runChatCompletion(const vector<models::AIMessage>& messages) const;
+    // Builds the ordered list of models to try for a request.
+    static vector<string> configuredModels(const models::AIProviderConfig& config);
+    // Breaks an AI response into short bullet-like lines.
+    static vector<string> splitBulletLines(const string& text);
+    // Formats dashboard data into a prompt-ready context block.
+    static string buildDashboardContext(const string& userId,
                                              const models::YearMonth& period,
                                              const AnalyticsService& analyticsService,
                                              const TransactionService& transactionService,
                                              const BudgetService& budgetService,
                                              const SavingsService& savingsService,
                                              const GoalService& goalService);
-    static std::string buildSavingsContext(const std::string& userId,
+    // Formats savings data into a prompt-ready context block.
+    static string buildSavingsContext(const string& userId,
                                            const models::YearMonth& period,
                                            const SavingsService& savingsService);
-    static std::string fallbackReceiptCategoryName(const std::string& rawText);
+    // Picks a simple fallback merchant/category hint from receipt text.
+    static string fallbackReceiptCategoryName(const string& rawText);
 
     models::AIProviderConfig config_;
 };

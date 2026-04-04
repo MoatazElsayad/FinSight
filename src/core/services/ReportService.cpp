@@ -8,8 +8,11 @@
 #include <map>
 #include <sstream>
 
+using namespace std;
+
 namespace finsight::core::services {
 
+// Generates a report by filtering transactions and summarizing the results.
 models::FinancialReport ReportService::generateReport(const models::ReportRequest& request,
                                                       const TransactionService& transactionService,
                                                       const BudgetService& budgetService) const {

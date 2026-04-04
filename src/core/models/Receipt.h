@@ -7,14 +7,18 @@
 #include <string>
 #include <vector>
 
+using namespace std;
+
 namespace finsight::core::models {
 
+// Tracks the current processing stage of a receipt.
 enum class ReceiptStatus {
     Uploaded,
     Parsed,
     Confirmed
 };
 
+// Stores a raw uploaded receipt document.
 struct ReceiptDocument {
     std::string id;
     std::string userId;
@@ -24,6 +28,7 @@ struct ReceiptDocument {
     Date uploadedAt;
 };
 
+// Stores parsed information extracted from a receipt.
 struct ReceiptParseResult {
     std::string receiptId;
     std::string merchant;
@@ -34,6 +39,7 @@ struct ReceiptParseResult {
     std::vector<std::string> extractedLines;
 };
 
+// Stores the final user-confirmed transaction values from a receipt.
 struct ReceiptConfirmation {
     std::string receiptId;
     std::string title;
