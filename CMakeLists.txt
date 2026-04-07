@@ -1,9 +1,13 @@
 cmake_minimum_required(VERSION 3.20)
-project(FinSightBackend LANGUAGES CXX)
+project(FinSight LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTORCC ON)
 
 find_package(SQLite3 QUIET)
 
@@ -26,6 +30,15 @@ if(NOT SQLite3_FOUND)
     endif()
 endif()
 
+find_package(Qt6 COMPONENTS Widgets QUIET)
+
+if(Qt6_FOUND)
+    set(QT_PACKAGE Qt6)
+else()
+    find_package(Qt5 REQUIRED COMPONENTS Widgets)
+    set(QT_PACKAGE Qt5)
+endif()
+
 add_library(finsight_core
     src/core/managers/FinanceTrackerBackend.cpp
     src/core/utils/EnvLoader.cpp
@@ -46,9 +59,26 @@ add_library(finsight_core
 )
 
 target_include_directories(finsight_core PUBLIC src)
+target_link_libraries(finsight_core PUBLIC SQLite::SQLite3)
 
 add_executable(finsight_backend_demo src/main.cpp)
 target_link_libraries(finsight_backend_demo PRIVATE finsight_core)
+
 add_executable(finsight_terminal_demo src/main_test.cpp)
 target_link_libraries(finsight_terminal_demo PRIVATE finsight_core)
-target_link_libraries(finsight_core PUBLIC SQLite::SQLite3)
+
+add_executable(finsight_gui
+    src/gui/main_gui.cpp
+    src/gui/MainWindow.cpp
+    src/gui/dashboard/DashboardWindow.cpp
+    src/gui/transactions/TransactionsWindow.cpp
+    src/gui/transactions/TransactionDialog.cpp
+    src/gui/budgets/BudgetsWindow.cpp
+)
+
+target_include_directories(finsight_gui PRIVATE src)
+
+target_link_libraries(finsight_gui PRIVATE
+    finsight_core
+    ${QT_PACKAGE}::Widgets
+)
