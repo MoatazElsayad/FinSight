@@ -1,7 +1,10 @@
 #ifndef TRANSACTIONSWINDOW_H
 #define TRANSACTIONSWINDOW_H
 
+#include "core/managers/FinanceTrackerBackend.h"
+
 #include <QWidget>
+#include <optional>
 
 class QTableWidget;
 class QLineEdit;
@@ -13,9 +16,20 @@ class TransactionsWindow : public QWidget {
     Q_OBJECT
 
 public:
-    explicit TransactionsWindow(QWidget *parent = nullptr);
+    explicit TransactionsWindow(finsight::core::managers::FinanceTrackerBackend& backend,
+                                const std::string& userId,
+                                QWidget *parent = nullptr);
+
+    void setUserId(const std::string& userId);
+    void refreshData();
+
+signals:
+    void dataChanged();
 
 private:
+    finsight::core::managers::FinanceTrackerBackend& backend_;
+    std::string userId_;
+
     QLineEdit *searchEdit;
     QComboBox *typeFilter;
     QComboBox *categoryFilter;
@@ -30,14 +44,11 @@ private:
     QPushButton *clearFiltersButton;
 
     void setupUi();
-    void loadDummyData();
+    void populateCategoryFilter();
     void onAddTransaction();
     void onEditTransaction();
-    void addTransactionRow(const QString &date,
-                           const QString &title,
-                           const QString &type,
-                           const QString &category,
-                           const QString &amountText);
+    void onDeleteTransaction();
+    std::optional<finsight::core::models::Transaction> selectedTransaction() const;
 };
 
 #endif

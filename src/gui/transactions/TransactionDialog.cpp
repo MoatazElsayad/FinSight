@@ -11,6 +11,8 @@
 #include <QMessageBox>
 #include <QDate>
 
+using namespace finsight::core::models;
+
 TransactionDialog::TransactionDialog(QWidget *parent) : QDialog(parent) {
     setupUi();
 }
@@ -23,12 +25,12 @@ void TransactionDialog::setupUi() {
     auto *formLayout = new QFormLayout();
 
     titleEdit = new QLineEdit();
+    merchantEdit = new QLineEdit();
 
     typeCombo = new QComboBox();
     typeCombo->addItems({"Income", "Expense"});
 
     categoryCombo = new QComboBox();
-    categoryCombo->addItems({"Food", "Transport", "Shopping", "Salary", "Bills"});
 
     dateEdit = new QDateEdit();
     dateEdit->setCalendarPopup(true);
@@ -43,6 +45,7 @@ void TransactionDialog::setupUi() {
     descriptionEdit->setPlaceholderText("Optional description");
 
     formLayout->addRow("Title:", titleEdit);
+    formLayout->addRow("Merchant:", merchantEdit);
     formLayout->addRow("Type:", typeCombo);
     formLayout->addRow("Category:", categoryCombo);
     formLayout->addRow("Date:", dateEdit);
@@ -54,6 +57,9 @@ void TransactionDialog::setupUi() {
     auto *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     connect(buttonBox, &QDialogButtonBox::accepted, this, &TransactionDialog::accept);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &TransactionDialog::reject);
+    connect(typeCombo, &QComboBox::currentTextChanged, this, [this]() {
+        refreshCategoryChoices();
+    });
 
     mainLayout->addWidget(buttonBox);
 }
@@ -70,6 +76,10 @@ QString TransactionDialog::category() const {
     return categoryCombo->currentText();
 }
 
+QString TransactionDialog::merchant() const {
+    return merchantEdit->text().trimmed();
+}
+
 QString TransactionDialog::date() const {
     return dateEdit->date().toString("yyyy-MM-dd");
 }
@@ -80,6 +90,19 @@ double TransactionDialog::amount() const {
 
 QString TransactionDialog::description() const {
     return descriptionEdit->toPlainText().trimmed();
+}
+
+std::string TransactionDialog::categoryId() const {
+    return categoryCombo->currentData().toString().toStdString();
+}
+
+TransactionType TransactionDialog::transactionType() const {
+    return type() == "Income" ? TransactionType::Income : TransactionType::Expense;
+}
+
+void TransactionDialog::setAvailableCategories(const std::vector<Category>& categories) {
+    categories_ = categories;
+    refreshCategoryChoices();
 }
 
 void TransactionDialog::setDialogTitle(const QString &text) {
@@ -102,6 +125,17 @@ void TransactionDialog::setCategory(const QString &value) {
     if (index >= 0) {
         categoryCombo->setCurrentIndex(index);
     }
+}
+
+void TransactionDialog::setCategoryId(const std::string& value) {
+    int index = categoryCombo->findData(QString::fromStdString(value));
+    if (index >= 0) {
+        categoryCombo->setCurrentIndex(index);
+    }
+}
+
+void TransactionDialog::setMerchant(const QString &value) {
+    merchantEdit->setText(value);
 }
 
 void TransactionDialog::setDate(const QString &value) {
@@ -129,6 +163,28 @@ void TransactionDialog::accept() {
         QMessageBox::warning(this, "Validation Error", "Amount must be greater than 0.");
         return;
     }
+    if (categoryCombo->currentIndex() < 0 || categoryId().empty()) {
+        QMessageBox::warning(this, "Validation Error", "Please choose a category.");
+        return;
+    }
 
     QDialog::accept();
+}
+
+void TransactionDialog::refreshCategoryChoices() {
+    const QString selectedCategoryId = categoryCombo->currentData().toString();
+    const auto selectedKind = transactionType() == TransactionType::Income ? CategoryKind::Income : CategoryKind::Expense;
+
+    categoryCombo->clear();
+    for (const auto& categoryEntry : categories_) {
+        if (categoryEntry.kind == selectedKind) {
+            categoryCombo->addItem(QString::fromStdString(categoryEntry.name),
+                                   QString::fromStdString(categoryEntry.id));
+        }
+    }
+
+    int index = categoryCombo->findData(selectedCategoryId);
+    if (index >= 0) {
+        categoryCombo->setCurrentIndex(index);
+    }
 }

@@ -1,5 +1,8 @@
 #include "gui/dashboard/DashboardWindow.h"
 
+#include <algorithm>
+#include <QDate>
+#include <QStringList>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
@@ -12,9 +15,20 @@
 #include <QListWidget>
 #include <QAbstractItemView>
 
-DashboardWindow::DashboardWindow(QWidget *parent) : QWidget(parent) {
+using namespace finsight::core::models;
+
+DashboardWindow::DashboardWindow(finsight::core::managers::FinanceTrackerBackend& backend,
+                                 const std::string& userId,
+                                 QWidget *parent)
+    : QWidget(parent),
+      backend_(backend),
+      userId_(userId) {
     setupUi();
-    loadDummyData();
+    refreshData();
+}
+
+void DashboardWindow::setUserId(const std::string& userId) {
+    userId_ = userId;
 }
 
 QWidget *DashboardWindow::createSummaryCard(const QString &title, QLabel *&valueLabel) {
@@ -105,41 +119,67 @@ void DashboardWindow::setupUi() {
     mainLayout->addLayout(bottomLayout);
 }
 
-void DashboardWindow::loadDummyData() {
-    incomeValueLabel->setText("12,000.00");
-    expensesValueLabel->setText("3,140.00");
-    savingsValueLabel->setText("8,860.00");
-    savingsRateValueLabel->setText("73.83%");
+void DashboardWindow::refreshData() {
+    if (userId_.empty()) {
+        incomeValueLabel->setText("0.00");
+        expensesValueLabel->setText("0.00");
+        savingsValueLabel->setText("0.00");
+        savingsRateValueLabel->setText("0.00%");
+        recentTransactionsTable->setRowCount(0);
+        topCategoriesList->clear();
+        budgetHealthLabel->setText("No user is signed in.");
+        return;
+    }
 
-    recentTransactionsTable->setRowCount(4);
+    const QDate today = QDate::currentDate();
+    const YearMonth period {today.year(), today.month()};
+    const auto dashboard = backend_.analytics().buildDashboard(
+        userId_,
+        period,
+        backend_.transactions(),
+        backend_.budgets(),
+        backend_.savings(),
+        backend_.goals());
 
-    recentTransactionsTable->setItem(0, 0, new QTableWidgetItem("2026-04-04"));
-    recentTransactionsTable->setItem(0, 1, new QTableWidgetItem("Electricity Bill"));
-    recentTransactionsTable->setItem(0, 2, new QTableWidgetItem("Expense"));
-    recentTransactionsTable->setItem(0, 3, new QTableWidgetItem("400.00"));
+    incomeValueLabel->setText(QString::number(dashboard.overview.income, 'f', 2));
+    expensesValueLabel->setText(QString::number(dashboard.overview.expenses, 'f', 2));
+    savingsValueLabel->setText(QString::number(dashboard.overview.netSavings, 'f', 2));
+    savingsRateValueLabel->setText(QString::number(dashboard.overview.savingsRate * 100.0, 'f', 2) + "%");
 
-    recentTransactionsTable->setItem(1, 0, new QTableWidgetItem("2026-04-03"));
-    recentTransactionsTable->setItem(1, 1, new QTableWidgetItem("Monthly Salary"));
-    recentTransactionsTable->setItem(1, 2, new QTableWidgetItem("Income"));
-    recentTransactionsTable->setItem(1, 3, new QTableWidgetItem("12000.00"));
+    recentTransactionsTable->setRowCount(0);
+    const auto transactions = backend_.transactions().listTransactions(userId_);
+    const int recentCount = std::min<int>(static_cast<int>(transactions.size()), 5);
+    recentTransactionsTable->setRowCount(recentCount);
+    for (int index = 0; index < recentCount; ++index) {
+        const auto& transaction = transactions[static_cast<size_t>(index)];
+        recentTransactionsTable->setItem(index, 0, new QTableWidgetItem(QString::fromStdString(transaction.date.toString())));
+        recentTransactionsTable->setItem(index, 1, new QTableWidgetItem(QString::fromStdString(transaction.title)));
+        recentTransactionsTable->setItem(index, 2, new QTableWidgetItem(
+            transaction.type == TransactionType::Income ? "Income" : "Expense"));
+        recentTransactionsTable->setItem(index, 3, new QTableWidgetItem(QString::number(transaction.amount, 'f', 2)));
+    }
 
-    recentTransactionsTable->setItem(2, 0, new QTableWidgetItem("2026-04-02"));
-    recentTransactionsTable->setItem(2, 1, new QTableWidgetItem("Uber"));
-    recentTransactionsTable->setItem(2, 2, new QTableWidgetItem("Expense"));
-    recentTransactionsTable->setItem(2, 3, new QTableWidgetItem("90.00"));
+    topCategoriesList->clear();
+    for (const auto& category : dashboard.topExpenseCategories) {
+        topCategoriesList->addItem(QString::fromStdString(category.categoryName) +
+                                   " - " +
+                                   QString::number(category.amount, 'f', 2));
+    }
+    if (dashboard.topExpenseCategories.empty()) {
+        topCategoriesList->addItem("No expense activity for this month.");
+    }
 
-    recentTransactionsTable->setItem(3, 0, new QTableWidgetItem("2026-04-01"));
-    recentTransactionsTable->setItem(3, 1, new QTableWidgetItem("Grocery Store"));
-    recentTransactionsTable->setItem(3, 2, new QTableWidgetItem("Expense"));
-    recentTransactionsTable->setItem(3, 3, new QTableWidgetItem("250.00"));
-
-    topCategoriesList->addItem("Bills - 1450.00");
-    topCategoriesList->addItem("Food - 900.00");
-    topCategoriesList->addItem("Entertainment - 500.00");
-    topCategoriesList->addItem("Transport - 350.00");
-
-    budgetHealthLabel->setText(
-        "You are within budget in most categories. "
-        "Bills and Food are currently the highest spending areas."
-    );
+    QStringList budgetLines;
+    for (const auto& status : dashboard.budgetHealth) {
+        const auto& category = backend_.transactions().requireCategory(status.budget.categoryId);
+        QString line = QString("%1: spent %2 / %3")
+                           .arg(QString::fromStdString(category.name))
+                           .arg(QString::number(status.spent, 'f', 2))
+                           .arg(QString::number(status.budget.limit, 'f', 2));
+        if (status.overspent) {
+            line += " (Over budget)";
+        }
+        budgetLines << line;
+    }
+    budgetHealthLabel->setText(budgetLines.isEmpty() ? "No budget data available." : budgetLines.join("\n"));
 }

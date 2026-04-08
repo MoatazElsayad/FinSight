@@ -1,5 +1,7 @@
 #include "gui/budgets/BudgetsWindow.h"
 
+#include <QDate>
+#include <QStringList>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
@@ -14,10 +16,48 @@
 #include <QMessageBox>
 #include <QAbstractItemView>
 
-BudgetsWindow::BudgetsWindow(QWidget *parent) : QWidget(parent) {
+using namespace finsight::core::models;
+
+namespace {
+
+QString formatMonth(const YearMonth& period) {
+    static const QStringList names {
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    };
+    return names.at(period.month - 1) + " " + QString::number(period.year);
+}
+
+int monthIndexFromText(const QString& text) {
+    static const QStringList names {
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    };
+    for (int index = 0; index < names.size(); ++index) {
+        if (text.startsWith(names[index])) {
+            return index + 1;
+        }
+    }
+    return 1;
+}
+
+}
+
+BudgetsWindow::BudgetsWindow(finsight::core::managers::FinanceTrackerBackend& backend,
+                             const std::string& userId,
+                             QWidget *parent)
+    : QWidget(parent),
+      backend_(backend),
+      userId_(userId) {
     setupUi();
-    loadDummyData();
+    populateCategories();
+    refreshData();
     refreshSummary();
+}
+
+void BudgetsWindow::setUserId(const std::string& userId) {
+    userId_ = userId;
+    populateCategories();
 }
 
 void BudgetsWindow::setupUi() {
@@ -36,10 +76,9 @@ void BudgetsWindow::setupUi() {
         "May 2026", "June 2026", "July 2026", "August 2026",
         "September 2026", "October 2026", "November 2026", "December 2026"
     });
-    monthCombo->setCurrentText("April 2026");
+    monthCombo->setCurrentText(formatMonth(YearMonth {QDate::currentDate().year(), QDate::currentDate().month()}));
 
     categoryCombo = new QComboBox();
-    categoryCombo->addItems({"Food", "Transport", "Shopping", "Salary", "Bills", "Entertainment"});
 
     amountSpin = new QDoubleSpinBox();
     amountSpin->setRange(1.0, 100000000.0);
@@ -103,17 +142,42 @@ void BudgetsWindow::setupUi() {
     connect(budgetsTable, &QTableWidget::itemSelectionChanged, this, &BudgetsWindow::onTableSelectionChanged);
 }
 
-void BudgetsWindow::loadDummyData() {
-    budgetsTable->setRowCount(0);
+void BudgetsWindow::populateCategories() {
+    categoryCombo->clear();
+    for (const auto& category : backend_.transactions().getCategoriesForUser(userId_)) {
+        if (category.kind == CategoryKind::Expense) {
+            categoryCombo->addItem(QString::fromStdString(category.name), QString::fromStdString(category.id));
+        }
+    }
+}
 
-    addBudgetRow("April 2026", "Food", 1500.0, 900.0);
-    addBudgetRow("April 2026", "Transport", 800.0, 350.0);
-    addBudgetRow("April 2026", "Bills", 2000.0, 1450.0);
-    addBudgetRow("April 2026", "Entertainment", 700.0, 500.0);
+void BudgetsWindow::refreshData() {
+    budgetsTable->setRowCount(0);
+    if (userId_.empty()) {
+        refreshSummary();
+        return;
+    }
+
+    for (const auto& budget : backend_.budgets().allBudgets()) {
+        if (budget.userId != userId_) {
+            continue;
+        }
+        const auto& category = backend_.transactions().requireCategory(budget.categoryId);
+        const double spent = backend_.transactions().spentForCategory(userId_, budget.categoryId, budget.period);
+        addBudgetRow(formatMonth(budget.period),
+                     QString::fromStdString(category.name),
+                     QString::fromStdString(budget.id),
+                     QString::fromStdString(budget.categoryId),
+                     budget.limit,
+                     spent);
+    }
+    refreshSummary();
 }
 
 void BudgetsWindow::addBudgetRow(const QString &month,
                                  const QString &category,
+                                 const QString& budgetId,
+                                 const QString& categoryId,
                                  double budgeted,
                                  double spent) {
     int row = budgetsTable->rowCount();
@@ -121,8 +185,12 @@ void BudgetsWindow::addBudgetRow(const QString &month,
 
     double remaining = budgeted - spent;
 
-    budgetsTable->setItem(row, 0, new QTableWidgetItem(month));
-    budgetsTable->setItem(row, 1, new QTableWidgetItem(category));
+    auto *monthItem = new QTableWidgetItem(month);
+    monthItem->setData(Qt::UserRole, budgetId);
+    budgetsTable->setItem(row, 0, monthItem);
+    auto *categoryItem = new QTableWidgetItem(category);
+    categoryItem->setData(Qt::UserRole, categoryId);
+    budgetsTable->setItem(row, 1, categoryItem);
     budgetsTable->setItem(row, 2, new QTableWidgetItem(QString::number(budgeted, 'f', 2)));
     budgetsTable->setItem(row, 3, new QTableWidgetItem(QString::number(spent, 'f', 2)));
     budgetsTable->setItem(row, 4, new QTableWidgetItem(QString::number(remaining, 'f', 2)));
@@ -145,7 +213,7 @@ void BudgetsWindow::refreshSummary() {
 }
 
 void BudgetsWindow::clearInputs() {
-    monthCombo->setCurrentText("April 2026");
+    monthCombo->setCurrentText(formatMonth(YearMonth {QDate::currentDate().year(), QDate::currentDate().month()}));
     categoryCombo->setCurrentIndex(0);
     amountSpin->setValue(0.0);
     budgetsTable->clearSelection();
@@ -154,33 +222,30 @@ void BudgetsWindow::clearInputs() {
 }
 
 void BudgetsWindow::onAddBudget() {
-    QString month = monthCombo->currentText();
-    QString category = categoryCombo->currentText();
     double budgeted = amountSpin->value();
 
     if (budgeted <= 0.0) {
         QMessageBox::warning(this, "Validation Error", "Budget amount must be greater than 0.");
         return;
     }
+    if (categoryCombo->currentIndex() < 0 || categoryCombo->currentData().toString().isEmpty()) {
+        QMessageBox::warning(this, "Validation Error", "Please choose a category.");
+        return;
+    }
 
-    double spent = 0.0;
-
-    if (category == "Food") spent = 900.0;
-    else if (category == "Transport") spent = 350.0;
-    else if (category == "Bills") spent = 1450.0;
-    else if (category == "Entertainment") spent = 500.0;
-    else if (category == "Shopping") spent = 600.0;
-    else if (category == "Salary") spent = 0.0;
-
-    addBudgetRow(month, category, budgeted, spent);
-    refreshSummary();
+    backend_.budgets().createBudget(
+        userId_,
+        categoryCombo->currentData().toString().toStdString(),
+        selectedPeriod(),
+        budgeted);
+    refreshData();
     clearInputs();
+    emit dataChanged();
 }
 
 void BudgetsWindow::onEditBudget() {
-    int currentRow = budgetsTable->currentRow();
-
-    if (currentRow < 0) {
+    const auto budget = selectedBudget();
+    if (!budget) {
         QMessageBox::information(this, "Edit Budget", "Please select a budget first.");
         return;
     }
@@ -191,23 +256,29 @@ void BudgetsWindow::onEditBudget() {
         QMessageBox::warning(this, "Validation Error", "Budget amount must be greater than 0.");
         return;
     }
+    if (categoryCombo->currentIndex() < 0 || categoryCombo->currentData().toString().isEmpty()) {
+        QMessageBox::warning(this, "Validation Error", "Please choose a category.");
+        return;
+    }
 
-    double spent = budgetsTable->item(currentRow, 3)->text().toDouble();
-    double remaining = budgeted - spent;
-
-    budgetsTable->item(currentRow, 0)->setText(monthCombo->currentText());
-    budgetsTable->item(currentRow, 1)->setText(categoryCombo->currentText());
-    budgetsTable->item(currentRow, 2)->setText(QString::number(budgeted, 'f', 2));
-    budgetsTable->item(currentRow, 4)->setText(QString::number(remaining, 'f', 2));
-
-    refreshSummary();
+    backend_.budgets().updateBudget(
+        userId_,
+        budget->id,
+        Budget {
+            .id = budget->id,
+            .userId = userId_,
+            .categoryId = categoryCombo->currentData().toString().toStdString(),
+            .period = selectedPeriod(),
+            .limit = budgeted,
+        });
+    refreshData();
     clearInputs();
+    emit dataChanged();
 }
 
 void BudgetsWindow::onDeleteBudget() {
-    int currentRow = budgetsTable->currentRow();
-
-    if (currentRow < 0) {
+    const auto budget = selectedBudget();
+    if (!budget) {
         QMessageBox::information(this, "Delete Budget", "Please select a budget first.");
         return;
     }
@@ -219,9 +290,10 @@ void BudgetsWindow::onDeleteBudget() {
     );
 
     if (reply == QMessageBox::Yes) {
-        budgetsTable->removeRow(currentRow);
-        refreshSummary();
+        backend_.budgets().deleteBudget(userId_, budget->id);
+        refreshData();
         clearInputs();
+        emit dataChanged();
     }
 }
 
@@ -237,6 +309,30 @@ void BudgetsWindow::onTableSelectionChanged() {
     }
 
     monthCombo->setCurrentText(budgetsTable->item(currentRow, 0)->text());
-    categoryCombo->setCurrentText(budgetsTable->item(currentRow, 1)->text());
+    const int categoryIndex = categoryCombo->findData(budgetsTable->item(currentRow, 1)->data(Qt::UserRole));
+    if (categoryIndex >= 0) {
+        categoryCombo->setCurrentIndex(categoryIndex);
+    }
     amountSpin->setValue(budgetsTable->item(currentRow, 2)->text().toDouble());
+}
+
+std::optional<Budget> BudgetsWindow::selectedBudget() const {
+    const int currentRow = budgetsTable->currentRow();
+    if (currentRow < 0 || budgetsTable->item(currentRow, 0) == nullptr) {
+        return std::nullopt;
+    }
+
+    const std::string budgetId = budgetsTable->item(currentRow, 0)->data(Qt::UserRole).toString().toStdString();
+    for (const auto& budget : backend_.budgets().allBudgets()) {
+        if (budget.id == budgetId && budget.userId == userId_) {
+            return budget;
+        }
+    }
+    return std::nullopt;
+}
+
+YearMonth BudgetsWindow::selectedPeriod() const {
+    const QString monthText = monthCombo->currentText();
+    const int year = monthText.right(4).toInt();
+    return YearMonth {year, monthIndexFromText(monthText)};
 }

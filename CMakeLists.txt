@@ -73,7 +73,10 @@ target_link_libraries(finsight_terminal_demo PRIVATE finsight_core)
 add_executable(finsight_gui
     src/gui/main_gui.cpp
     src/gui/MainWindow.cpp
+    src/gui/auth/LoginDialog.cpp
+    src/gui/auth/RegisterDialog.cpp
     src/gui/dashboard/DashboardWindow.cpp
+    src/gui/profile/ProfileWindow.cpp
     src/gui/transactions/TransactionsWindow.cpp
     src/gui/transactions/TransactionDialog.cpp
     src/gui/budgets/BudgetsWindow.cpp

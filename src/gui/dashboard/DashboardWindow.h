@@ -1,6 +1,8 @@
 #ifndef DASHBOARDWINDOW_H
 #define DASHBOARDWINDOW_H
 
+#include "core/managers/FinanceTrackerBackend.h"
+
 #include <QWidget>
 
 class QLabel;
@@ -11,9 +13,17 @@ class DashboardWindow : public QWidget {
     Q_OBJECT
 
 public:
-    explicit DashboardWindow(QWidget *parent = nullptr);
+    explicit DashboardWindow(finsight::core::managers::FinanceTrackerBackend& backend,
+                             const std::string& userId,
+                             QWidget *parent = nullptr);
+
+    void setUserId(const std::string& userId);
+    void refreshData();
 
 private:
+    finsight::core::managers::FinanceTrackerBackend& backend_;
+    std::string userId_;
+
     QLabel *incomeValueLabel;
     QLabel *expensesValueLabel;
     QLabel *savingsValueLabel;
@@ -24,7 +34,6 @@ private:
     QLabel *budgetHealthLabel;
 
     void setupUi();
-    void loadDummyData();
     QWidget *createSummaryCard(const QString &title, QLabel *&valueLabel);
 };
 
