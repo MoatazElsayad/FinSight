@@ -24,6 +24,16 @@ services::BudgetService& FinanceTrackerBackend::budgets() {
     return budgetService_;
 }
 
+// Returns the budget alert service instance.
+services::BudgetAlertService& FinanceTrackerBackend::budgetAlerts() {
+    return budgetAlertService_;
+}
+
+// Returns the email service instance.
+services::EmailService& FinanceTrackerBackend::email() {
+    return emailService_;
+}
+
 // Returns the savings service instance.
 services::SavingsService& FinanceTrackerBackend::savings() {
     return savingsService_;
@@ -77,6 +87,16 @@ const services::TransactionService& FinanceTrackerBackend::transactions() const 
 // Returns the budget service instance as const.
 const services::BudgetService& FinanceTrackerBackend::budgets() const {
     return budgetService_;
+}
+
+// Returns the budget alert service instance as const.
+const services::BudgetAlertService& FinanceTrackerBackend::budgetAlerts() const {
+    return budgetAlertService_;
+}
+
+// Returns the email service instance as const.
+const services::EmailService& FinanceTrackerBackend::email() const {
+    return emailService_;
 }
 
 // Returns the savings service instance as const.

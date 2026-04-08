@@ -16,6 +16,7 @@ namespace {
 using finsight::core::managers::FinanceTrackerBackend;
 using finsight::core::models::AIProviderConfig;
 using finsight::core::models::Date;
+using finsight::core::models::EmailProviderConfig;
 using finsight::core::models::Goal;
 using finsight::core::models::ReportRequest;
 using finsight::core::models::SavingsEntry;
@@ -151,6 +152,18 @@ void configureAi(FinanceTrackerBackend& backend) {
     });
 }
 
+// Configures Resend email sending from environment settings.
+void configureEmail(FinanceTrackerBackend& backend) {
+    EnvLoader::loadFromNearestFile();
+    backend.email().configure(EmailProviderConfig {
+        .enabled = EnvLoader::getBool("FINSIGHT_EMAIL_ENABLED", false),
+        .apiUrl = EnvLoader::get("FINSIGHT_RESEND_API_URL", "https://api.resend.com/emails"),
+        .apiKey = EnvLoader::get("FINSIGHT_RESEND_API_KEY", "PASTE_REAL_RESEND_API_KEY_HERE"),
+        .fromEmail = EnvLoader::get("FINSIGHT_RESEND_FROM_EMAIL"),
+        .fromName = EnvLoader::get("FINSIGHT_RESEND_FROM_NAME", "FinSight"),
+    });
+}
+
 // Saves the current backend state to disk.
 void saveData(FinanceTrackerBackend& backend, BackendStore& store) {
     store.save(backend, kPersistenceDirectory);
@@ -209,7 +222,7 @@ void addTransactionPage(FinanceTrackerBackend& backend, const string& userId) {
                           : finsight::core::models::CategoryKind::Expense;
     const string categoryId = chooseCategory(backend, userId, kind);
 
-    backend.transactions().addTransaction(Transaction {
+    const auto transaction = backend.transactions().addTransaction(Transaction {
         .userId = userId,
         .title = promptLine("Title: "),
         .description = promptLine("Description: "),
@@ -221,6 +234,24 @@ void addTransactionPage(FinanceTrackerBackend& backend, const string& userId) {
     });
 
     cout << "Transaction saved.\n";
+    const auto alertEmails = backend.budgetAlerts().notifyBudgetExceededByTransaction(
+        transaction,
+        backend.auth(),
+        backend.transactions(),
+        backend.budgets(),
+        backend.email());
+    if (alertEmails.empty()) {
+        cout << "No budget alert email was needed.\n";
+        return;
+    }
+
+    for (const auto& email : alertEmails) {
+        cout << "Budget alert email for " << email.recipient << ": "
+             << (email.success ? "sent" : "not sent") << '\n';
+        if (!email.error.empty()) {
+            cout << "Email detail: " << email.error << '\n';
+        }
+    }
 }
 
 // Shows monthly budgets.
@@ -360,10 +391,19 @@ void showAiPage(FinanceTrackerBackend& backend, const string& userId) {
     cout << "Finance Chat\n  " << chatAnswer.answer << '\n';
 }
 
+// Shows the current email configuration status.
+void showEmailPage(FinanceTrackerBackend& backend) {
+    printPage("Email Page", "Resend API configuration used for budget alerts");
+    printField("Email Enabled", backend.email().config().enabled ? "yes" : "no");
+    printField("API URL", backend.email().config().apiUrl);
+    printField("From Email", backend.email().config().fromEmail.empty() ? "(not set)" : backend.email().config().fromEmail);
+    printField("From Name", backend.email().config().fromName.empty() ? "(not set)" : backend.email().config().fromName);
+}
+
 // Shows the main post-login navigation shell.
 void userMenu(FinanceTrackerBackend& backend, BackendStore& store, const finsight::core::models::User& user) {
     while (true) {
-        printPage("FinSight App Shell", "Dashboard | Transactions | Budgets | Savings | Goals | Reports | AI | Save");
+        printPage("FinSight App Shell", "Dashboard | Transactions | Budgets | Savings | Goals | Reports | AI | Email | Save");
         printField("Signed In User", user.fullName);
         printField("Email", user.email);
         cout << '\n';
@@ -379,8 +419,9 @@ void userMenu(FinanceTrackerBackend& backend, BackendStore& store, const finsigh
         cout << "[10] Add Goal\n";
         cout << "[11] Reports\n";
         cout << "[12] AI\n";
-        cout << "[13] Save Data\n";
-        cout << "[14] Logout\n";
+        cout << "[13] Email\n";
+        cout << "[14] Save Data\n";
+        cout << "[15] Logout\n";
 
         const string choice = promptChoice("Choice: ");
         if (choice == "1") showDashboardPage(backend, user.id);
@@ -395,8 +436,9 @@ void userMenu(FinanceTrackerBackend& backend, BackendStore& store, const finsigh
         else if (choice == "10") addGoalPage(backend, user.id);
         else if (choice == "11") showReportsPage(backend, user.id);
         else if (choice == "12") showAiPage(backend, user.id);
-        else if (choice == "13") saveData(backend, store);
-        else if (choice == "14") {
+        else if (choice == "13") showEmailPage(backend);
+        else if (choice == "14") saveData(backend, store);
+        else if (choice == "15") {
             saveData(backend, store);
             break;
         } else {
@@ -445,6 +487,7 @@ int main() {
         FinanceTrackerBackend backend;
         BackendStore store;
         configureAi(backend);
+        configureEmail(backend);
         store.load(backend, kPersistenceDirectory);
 
         while (true) {

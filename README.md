@@ -44,8 +44,19 @@ Supported keys:
 - `FINSIGHT_OPENROUTER_API_URL`
 - `FINSIGHT_OPENROUTER_API_KEY`
 - `FINSIGHT_OPENROUTER_MODEL`
+- `FINSIGHT_EMAIL_ENABLED`
+- `FINSIGHT_RESEND_API_URL`
+- `FINSIGHT_RESEND_API_KEY`
+- `FINSIGHT_RESEND_FROM_EMAIL`
+- `FINSIGHT_RESEND_FROM_NAME`
 
 Copy `.env.example` to `.env` and fill in your real values. Both `src/main.cpp` and `src/main_test.cpp` load the nearest `.env` file automatically.
+
+## Budget Alert Emails
+
+The backend can now send a budget alert email to the registered user when a newly added expense transaction pushes one category budget over its monthly limit.
+
+The current implementation uses the Resend email API through `curl`, configured from `.env`.
 
 ## Current Scope
 

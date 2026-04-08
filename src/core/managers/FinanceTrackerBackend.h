@@ -3,7 +3,9 @@
 #include "../services/AIService.h"
 #include "../services/AnalyticsService.h"
 #include "../services/AuthService.h"
+#include "../services/BudgetAlertService.h"
 #include "../services/BudgetService.h"
+#include "../services/EmailService.h"
 #include "../services/GoalService.h"
 #include "../services/ReceiptService.h"
 #include "../services/ReportService.h"
@@ -26,6 +28,10 @@ public:
     services::TransactionService& transactions();
     // Exposes the budget service.
     services::BudgetService& budgets();
+    // Exposes the budget alert service.
+    services::BudgetAlertService& budgetAlerts();
+    // Exposes the email service.
+    services::EmailService& email();
     // Exposes the savings and investment service.
     services::SavingsService& savings();
     // Exposes the financial goals service.
@@ -49,6 +55,10 @@ public:
     const services::TransactionService& transactions() const;
     // Returns the budget service.
     const services::BudgetService& budgets() const;
+    // Returns the budget alert service.
+    const services::BudgetAlertService& budgetAlerts() const;
+    // Returns the email service.
+    const services::EmailService& email() const;
     // Returns the savings and investment service.
     const services::SavingsService& savings() const;
     // Returns the financial goals service.
@@ -69,6 +79,8 @@ private:
     services::AuthService authService_;
     services::TransactionService transactionService_;
     services::BudgetService budgetService_;
+    services::BudgetAlertService budgetAlertService_;
+    services::EmailService emailService_;
     services::SavingsService savingsService_;
     services::GoalService goalService_;
     services::AnalyticsService analyticsService_;

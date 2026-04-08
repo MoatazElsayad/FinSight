@@ -1,5 +1,6 @@
 #include "core/utils/EnvLoader.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <fstream>
@@ -68,6 +69,17 @@ bool EnvLoader::loadFile(const filesystem::path& path) {
 string EnvLoader::get(const string& key, const string& defaultValue) {
     const char* value = getenv(key.c_str());
     return value == nullptr ? defaultValue : value;
+}
+
+bool EnvLoader::getBool(const string& key, bool defaultValue) {
+    string value = trim(get(key));
+    transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(tolower(ch));
+    });
+    if (value.empty()) {
+        return defaultValue;
+    }
+    return value == "1" || value == "true" || value == "yes" || value == "on";
 }
 
 string EnvLoader::trim(const string& value) {

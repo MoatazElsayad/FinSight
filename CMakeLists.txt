@@ -32,7 +32,9 @@ add_library(finsight_core
     src/core/services/AIService.cpp
     src/core/services/AnalyticsService.cpp
     src/core/services/AuthService.cpp
+    src/core/services/BudgetAlertService.cpp
     src/core/services/BudgetService.cpp
+    src/core/services/EmailService.cpp
     src/core/services/GoalService.cpp
     src/core/services/ReceiptService.cpp
     src/core/services/ReportService.cpp
@@ -43,6 +45,7 @@ add_library(finsight_core
     src/data/json/TextCodec.cpp
     src/data/storage/BackendStore.cpp
     src/network/ai/ChatCompletionClient.cpp
+    src/network/email/ResendEmailClient.cpp
 )
 
 target_include_directories(finsight_core PUBLIC src)

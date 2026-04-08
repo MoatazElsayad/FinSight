@@ -22,6 +22,8 @@ public:
 
     // Reads one environment variable with a fallback default value.
     static string get(const string& key, const string& defaultValue = "");
+    // Reads one boolean environment variable with a fallback default value.
+    static bool getBool(const string& key, bool defaultValue = false);
 
 private:
     // Removes surrounding whitespace from one text value.

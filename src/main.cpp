@@ -10,6 +10,7 @@ using namespace std;
 int main() {
     using finsight::core::managers::FinanceTrackerBackend;
     using finsight::core::models::Date;
+    using finsight::core::models::EmailProviderConfig;
     using finsight::core::models::Goal;
     using finsight::core::models::Investment;
     using finsight::core::models::InvestmentType;
@@ -31,6 +32,11 @@ int main() {
     const string apiUrl = EnvLoader::get("FINSIGHT_OPENROUTER_API_URL", "https://openrouter.ai/api/v1/chat/completions");
     const string apiKey = EnvLoader::get("FINSIGHT_OPENROUTER_API_KEY", "PASTE_REAL_API_KEY_HERE");
     const string primaryModel = EnvLoader::get("FINSIGHT_OPENROUTER_MODEL", "liquid/lfm-2.5-1.2b-instruct:free");
+    const bool emailEnabled = EnvLoader::getBool("FINSIGHT_EMAIL_ENABLED", false);
+    const string emailApiUrl = EnvLoader::get("FINSIGHT_RESEND_API_URL", "https://api.resend.com/emails");
+    const string emailApiKey = EnvLoader::get("FINSIGHT_RESEND_API_KEY", "PASTE_REAL_RESEND_API_KEY_HERE");
+    const string emailFromEmail = EnvLoader::get("FINSIGHT_RESEND_FROM_EMAIL");
+    const string emailFromName = EnvLoader::get("FINSIGHT_RESEND_FROM_NAME", "FinSight");
 
     // Builds a demo backend instance and configures the AI provider.
     FinanceTrackerBackend backend;
@@ -47,6 +53,13 @@ int main() {
         },
         .appName = "FinSight",
         .appUrl = "https://example.com/finsight",
+    });
+    backend.email().configure(EmailProviderConfig {
+        .enabled = emailEnabled,
+        .apiUrl = emailApiUrl,
+        .apiKey = emailApiKey,
+        .fromEmail = emailFromEmail,
+        .fromName = emailFromName,
     });
     // Creates one demo user and session for the sample run.
     const auto user = backend.auth().registerUser(
@@ -75,7 +88,7 @@ int main() {
         .merchant = "Employer",
     });
 
-    backend.transactions().addTransaction(Transaction {
+    const auto firstExpense = backend.transactions().addTransaction(Transaction {
         .userId = user.id,
         .title = "Groceries",
         .description = "Weekly grocery trip",
@@ -87,7 +100,7 @@ int main() {
     });
 
     // Adds sample budgets, savings, investments, and goals.
-    backend.budgets().createBudget(user.id, foodCategory.id, YearMonth {2026, 4}, 3000.0);
+    backend.budgets().createBudget(user.id, foodCategory.id, YearMonth {2026, 4}, 1500.0);
     backend.savings().setGoal(user.id, 5000.0, 100000.0, Date {2026, 12, 31});
     backend.savings().addEntry(SavingsEntry {
         .userId = user.id,
@@ -143,7 +156,7 @@ int main() {
         "Local Market\n2026-04-02\nTOTAL 950.00\nFood and groceries",
         Date {2026, 4, 3});
     const auto parsedReceipt = backend.receipts().parseReceipt(user.id, receipt.id, backend.transactions());
-    backend.receipts().confirmReceiptAsTransaction(
+    const auto importedReceiptTransaction = backend.receipts().confirmReceiptAsTransaction(
         user.id,
         ReceiptConfirmation {
             .receiptId = receipt.id,
@@ -156,6 +169,12 @@ int main() {
             .date = parsedReceipt.transactionDate.value_or(Date {2026, 4, 2}),
         },
         backend.transactions());
+    const auto budgetAlertEmails = backend.budgetAlerts().notifyBudgetExceededByTransaction(
+        importedReceiptTransaction,
+        backend.auth(),
+        backend.transactions(),
+        backend.budgets(),
+        backend.email());
 
     // Builds analytics, reports, and AI outputs from the sample data.
     const auto dashboard = backend.analytics().buildDashboard(
@@ -236,6 +255,14 @@ int main() {
     }
     cout << '\n';
     cout << "AI URL: " << backend.ai().config().apiUrl << '\n';
+    cout << "Email enabled: " << (backend.email().config().enabled ? "yes" : "no") << '\n';
+    cout << "Budget alert emails attempted: " << budgetAlertEmails.size() << '\n';
+    for (const auto& email : budgetAlertEmails) {
+        cout << "Budget alert to " << email.recipient << ": " << (email.success ? "sent" : "not sent") << '\n';
+        if (!email.error.empty()) {
+            cout << "Email detail: " << email.error << '\n';
+        }
+    }
     cout << "SQLite file: " << store.databasePath(persistenceDirectory).string() << '\n';
     cout << "JSON sidecar: " << store.sidecarPath(persistenceDirectory).string() << '\n';
     cout << "Restored expenses: " << restoredDashboard.overview.expenses << '\n';
