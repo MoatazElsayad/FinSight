@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/asio.hpp>
 #include <string>
 
 class Client {
@@ -14,6 +15,7 @@ public:
 private:
     std::string host_;
     int port_;
-    int socket_fd_;
-};
 
+    boost::asio::io_context io_context_;
+    boost::asio::ip::tcp::socket socket_;
+};

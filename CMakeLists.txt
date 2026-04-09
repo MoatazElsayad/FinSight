@@ -30,6 +30,8 @@ if(NOT SQLite3_FOUND)
     endif()
 endif()
 
+find_package(Boost REQUIRED COMPONENTS system)
+
 find_package(Qt6 COMPONENTS Widgets QUIET)
 
 if(Qt6_FOUND)
@@ -63,7 +65,7 @@ add_library(finsight_core
 )
 
 target_include_directories(finsight_core PUBLIC src)
-target_link_libraries(finsight_core PUBLIC SQLite::SQLite3)
+target_link_libraries(finsight_core PUBLIC SQLite::SQLite3 Boost::system)
 
 add_executable(finsight_backend_demo src/main.cpp)
 target_link_libraries(finsight_backend_demo PRIVATE finsight_core)
