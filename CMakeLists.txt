@@ -80,6 +80,7 @@ add_executable(finsight_gui
     src/gui/transactions/TransactionsWindow.cpp
     src/gui/transactions/TransactionDialog.cpp
     src/gui/budgets/BudgetsWindow.cpp
+    src/gui/ai/AIInsightsWindow.cpp
 )
 
 target_include_directories(finsight_gui PRIVATE src)

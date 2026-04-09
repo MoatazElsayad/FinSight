@@ -13,6 +13,7 @@ class DashboardWindow;
 class TransactionsWindow;
 class BudgetsWindow;
 class ProfileWindow;
+class AIInsightsWindow;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -33,11 +34,13 @@ private:
     TransactionsWindow *transactionsPage;
     BudgetsWindow *budgetsPage;
     ProfileWindow *profilePage;
+    AIInsightsWindow *aiInsightsPage;
 
     QPushButton *dashboardButton;
     QPushButton *transactionsButton;
     QPushButton *budgetsButton;
     QPushButton *profileButton;
+    QPushButton *aiInsightsButton;
     QPushButton *logoutButton;
 
     void setupUi();

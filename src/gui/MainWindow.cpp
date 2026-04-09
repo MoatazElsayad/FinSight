@@ -2,6 +2,7 @@
 #include "gui/auth/LoginDialog.h"
 #include "gui/auth/RegisterDialog.h"
 #include "gui/profile/ProfileWindow.h"
+#include "gui/ai/AIInsightsWindow.h"
 #include "gui/dashboard/DashboardWindow.h"
 #include "gui/transactions/TransactionsWindow.h"
 #include "gui/budgets/BudgetsWindow.h"
@@ -13,6 +14,7 @@
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QStackedWidget>
+#include <QFrame>
 
 MainWindow::MainWindow(finsight::core::managers::FinanceTrackerBackend& backend,
                        QWidget *parent)
@@ -26,20 +28,51 @@ MainWindow::MainWindow(finsight::core::managers::FinanceTrackerBackend& backend,
 void MainWindow::setupUi() {
     auto *central = new QWidget(this);
     auto *mainLayout = new QHBoxLayout(central);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(0);
+
+    setStyleSheet(
+        "QMainWindow, QWidget { background-color: #090e1c; color: #e5e9f4; }"
+        "QPushButton {"
+        "  background-color: #11192b;"
+        "  border: 1px solid #27314a;"
+        "  border-radius: 10px;"
+        "  color: #dce4f8;"
+        "  text-align: left;"
+        "  padding: 10px 12px;"
+        "  font-weight: 600;"
+        "}"
+        "QPushButton:hover { background-color: #1a2742; }"
+        "QPushButton:pressed { background-color: #24385f; }"
+    );
 
     auto *navLayout = new QVBoxLayout();
+    navLayout->setContentsMargins(14, 14, 14, 14);
+    navLayout->setSpacing(8);
     dashboardButton = new QPushButton("Dashboard");
     transactionsButton = new QPushButton("Transactions");
     budgetsButton = new QPushButton("Budgets");
     profileButton = new QPushButton("Profile");
+    aiInsightsButton = new QPushButton("AI Insights");
     logoutButton = new QPushButton("Logout");
 
     navLayout->addWidget(dashboardButton);
     navLayout->addWidget(transactionsButton);
     navLayout->addWidget(budgetsButton);
     navLayout->addWidget(profileButton);
+    navLayout->addWidget(aiInsightsButton);
+    navLayout->addSpacing(10);
     navLayout->addWidget(logoutButton);
     navLayout->addStretch();
+
+    auto *navFrame = new QFrame();
+    navFrame->setStyleSheet(
+        "QFrame {"
+        "  background-color: #0d1425;"
+        "  border-right: 1px solid #25304a;"
+        "}"
+    );
+    navFrame->setLayout(navLayout);
 
     stack = new QStackedWidget();
 
@@ -47,18 +80,20 @@ void MainWindow::setupUi() {
     transactionsPage = new TransactionsWindow(backend_, userId_);
     budgetsPage = new BudgetsWindow(backend_, userId_);
     profilePage = new ProfileWindow(backend_, userId_);
+    aiInsightsPage = new AIInsightsWindow(backend_, userId_);
 
     stack->addWidget(dashboardPage);
     stack->addWidget(transactionsPage);
     stack->addWidget(budgetsPage);
     stack->addWidget(profilePage);
+    stack->addWidget(aiInsightsPage);
 
-    mainLayout->addLayout(navLayout);
+    mainLayout->addWidget(navFrame);
     mainLayout->addWidget(stack, 1);
 
     setCentralWidget(central);
     setWindowTitle("FinSight");
-    resize(1000, 600);
+    resize(1320, 780);
 }
 
 void MainWindow::connectSignals() {
@@ -79,6 +114,10 @@ void MainWindow::connectSignals() {
     connect(profileButton, &QPushButton::clicked, this, [this]() {
         profilePage->refreshData();
         stack->setCurrentWidget(profilePage);
+    });
+    connect(aiInsightsButton, &QPushButton::clicked, this, [this]() {
+        aiInsightsPage->refreshData();
+        stack->setCurrentWidget(aiInsightsPage);
     });
     connect(logoutButton, &QPushButton::clicked, this, [this]() {
         clearCurrentUser();
@@ -103,6 +142,7 @@ void MainWindow::refreshPages() {
     transactionsPage->refreshData();
     budgetsPage->refreshData();
     profilePage->refreshData();
+    aiInsightsPage->refreshData();
 }
 
 bool MainWindow::promptForAuthentication() {
@@ -156,6 +196,7 @@ void MainWindow::setCurrentUser(const std::string& userId) {
     transactionsPage->setUserId(userId_);
     budgetsPage->setUserId(userId_);
     profilePage->setUserId(userId_);
+    aiInsightsPage->setUserId(userId_);
     refreshPages();
     stack->setCurrentWidget(dashboardPage);
 }
@@ -170,6 +211,7 @@ void MainWindow::clearCurrentUser() {
     transactionsPage->setUserId(userId_);
     budgetsPage->setUserId(userId_);
     profilePage->setUserId(userId_);
+    aiInsightsPage->setUserId(userId_);
     refreshPages();
 }
 
