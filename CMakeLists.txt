@@ -59,6 +59,7 @@ add_library(finsight_core
     src/data/storage/BackendStore.cpp
     src/network/ai/ChatCompletionClient.cpp
     src/network/email/ResendEmailClient.cpp
+    src/network/client/Client.cpp
 )
 
 target_include_directories(finsight_core PUBLIC src)
