@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <sstream>
 
 using namespace std;
@@ -37,7 +38,8 @@ string readPipe(const string& command) {
 
 // Checks whether the configured API key has been replaced with a real value.
 bool hasRealKey(const string& apiKey) {
-    return !apiKey.empty() && apiKey != "PASTE_REAL_API_KEY_HERE";
+    const bool isReal = !apiKey.empty() && apiKey != "PASTE_REAL_API_KEY_HERE" && apiKey.find("sk-or-v1") == 0;
+    return isReal;
 }
 
 }  // namespace
@@ -46,11 +48,17 @@ bool hasRealKey(const string& apiKey) {
 core::models::AIChatResponse ChatCompletionClient::complete(const core::models::AIProviderConfig& config,
                                                             const core::models::AIChatRequest& request) const {
     core::models::AIChatResponse response {.model = request.model.empty() ? config.model : request.model};
+    
+    // Debug output
+    cout << "AI Request - Model: " << response.model << ", API Key starts with: " << config.apiKey.substr(0, 10) << "..." << endl;
+    
     if (!hasRealKey(config.apiKey)) {
+        cout << "Using placeholder response - API key validation failed" << endl;
         response.success = true;
         response.usedFallback = true;
         response.content =
-            "AI placeholder response. Replace the API key and model in AIProviderConfig to use a real provider.";
+            "AI placeholder response. The API key appears to be invalid or not configured. "
+            "Please check that FINSIGHT_OPENROUTER_API_KEY is set to a valid OpenRouter API key in your .env file.";
         return response;
     }
 
@@ -66,7 +74,12 @@ core::models::AIChatResponse ChatCompletionClient::complete(const core::models::
             << "-H \"X-Title: " << config.appName << "\" "
             << "--data-binary @\"" << payloadPath << "\"";
 
+    cout << "Executing curl command..." << endl;
     const auto raw = readPipe(command.str());
+    cout << "Curl response length: " << raw.length() << endl;
+    if (!raw.empty()) {
+        cout << "Response starts with: " << raw.substr(0, 100) << "..." << endl;
+    }
     deleteTempPayload(payloadPath);
 
     response.rawResponse = raw;
@@ -76,7 +89,11 @@ core::models::AIChatResponse ChatCompletionClient::complete(const core::models::
         response.usedFallback = true;
         response.error = "Could not parse model response. Check API URL, key, model, or response shape.";
         response.content =
-            "AI request reached the provider but the response could not be parsed by the current client.";
+            "AI request failed. Please check:\n"
+            "- API key is valid and has credits\n"
+            "- Model name is correct\n"
+            "- Internet connection is working\n"
+            "- OpenRouter service is available";
     }
     return response;
 }

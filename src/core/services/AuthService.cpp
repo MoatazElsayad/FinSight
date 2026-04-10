@@ -44,9 +44,10 @@ models::User AuthService::registerUser(const std::string& fullName,
 std::optional<models::User> AuthService::login(const std::string& email,
                                                const std::string& password) const {
     const auto hashedPassword = hashPassword(password);
+    const auto legacyPassword = legacyHashPassword(password);
     for (const auto& user : users_) {
         if (models::toLower(user.email) == models::toLower(email) &&
-            user.passwordHash == hashedPassword) {
+            (user.passwordHash == hashedPassword || user.passwordHash == legacyPassword)) {
             return user;
         }
     }
@@ -105,9 +106,20 @@ std::string AuthService::nextId() {
     return stream.str();
 }
 
+// Legacy hash used by prior versions.
+std::string AuthService::legacyHashPassword(const std::string& password) {
+    return std::to_string(std::hash<std::string> {}(password));
+}
+
 // Creates a simple hash string for a password.
 std::string AuthService::hashPassword(const std::string& password) {
-    return std::to_string(std::hash<std::string> {}(password));
+    // Use DJB2 hash algorithm for deterministic hashing
+    // This ensures the same password always produces the same hash
+    unsigned long hash = 5381;
+    for (unsigned char c : password) {
+        hash = ((hash << 5) + hash) + c;
+    }
+    return std::to_string(hash);
 }
 
 }  // namespace finsight::core::services

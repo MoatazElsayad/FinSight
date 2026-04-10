@@ -5,6 +5,8 @@
 
 #include <QWidget>
 
+#include <QTextEdit>
+
 class QLabel;
 class QTableWidget;
 class QListWidget;
@@ -50,12 +52,20 @@ private:
     QListWidget *topCategoriesList;
     QLabel *budgetHealthLabel;
 
+    // AI Summary components
+    QPushButton *generateAISummaryButton;
+    QLabel *aiSummaryTitle;
+    QTextEdit *aiSummaryText;
+    QListWidget *aiRecommendationsList;
+    QLabel *aiStatusLabel;
+
     void setupUi();
     QWidget *createSummaryCard(const QString &title, QLabel *&valueLabel, const QString& accentColor);
     void configureMonthSelector();
     bool selectedYearMonth(finsight::core::models::YearMonth& period) const;
     bool isTransactionInScope(const finsight::core::models::Transaction& transaction,
                               const finsight::core::models::YearMonth& period) const;
+    void generateAISummary();
 };
 
 #endif

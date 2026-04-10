@@ -36,9 +36,17 @@ find_package(Qt6 COMPONENTS Widgets QUIET)
 
 if(Qt6_FOUND)
     set(QT_PACKAGE Qt6)
+    find_package(Qt6 COMPONENTS Svg QUIET)
+    if(NOT Qt6Svg_FOUND)
+        message(WARNING "Qt6Svg not found, SVG rendering may not work")
+    endif()
 else()
     find_package(Qt5 REQUIRED COMPONENTS Widgets)
     set(QT_PACKAGE Qt5)
+    find_package(Qt5Svg QUIET)
+    if(NOT Qt5Svg_FOUND)
+        message(WARNING "Qt5Svg not found, SVG rendering may not work")
+    endif()
 endif()
 
 add_library(finsight_core
@@ -92,3 +100,7 @@ target_link_libraries(finsight_gui PRIVATE
     finsight_core
     ${QT_PACKAGE}::Widgets
 )
+
+if(Qt6Svg_FOUND OR Qt5Svg_FOUND)
+    target_link_libraries(finsight_gui PRIVATE ${QT_PACKAGE}::Svg)
+endif()

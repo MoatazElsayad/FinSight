@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/finsight_terminal_demo.dir/finsight_terminal_demo_autogen/mocs_compilation.cpp.o CMakeFiles/finsight_terminal_demo.dir/src/main_test.cpp.o -o finsight_terminal_demo  libfinsight_core.a /usr/lib/x86_64-linux-gnu/libsqlite3.so /usr/lib/x86_64-linux-gnu/libboost_system.so.1.83.0 

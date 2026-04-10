@@ -37,6 +37,8 @@ public:
 private:
     // Generates the next user id.
     std::string nextId();
+    // Legacy hash used by earlier builds for backwards compatibility.
+    static std::string legacyHashPassword(const std::string& password);
     // Creates a simple deterministic hash for stored passwords.
     static std::string hashPassword(const std::string& password);
 

@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <random>
 #include <sstream>
 
 using namespace std;
@@ -122,7 +123,14 @@ models::AIReceiptSuggestion AIService::suggestReceiptTransaction(const string& r
 models::AIChatResponse AIService::runChatCompletion(const vector<models::AIMessage>& messages) const {
     network::ai::ChatCompletionClient client;
     models::AIChatResponse lastResponse;
-    const auto models = configuredModels(config_);
+    auto models = configuredModels(config_);
+    
+    // Shuffle the models for random fallback order (skip primary model)
+    if (models.size() > 1) {
+        random_device rd;
+        mt19937 g(rd());
+        shuffle(models.begin() + 1, models.end(), g);
+    }
 
     for (size_t index = 0; index < models.size(); ++index) {
         auto response = client.complete(config_, models::AIChatRequest {

@@ -1,8 +1,11 @@
 #include "gui/dashboard/DashboardWindow.h"
 
 #include <algorithm>
+#include <exception>
 #include <map>
 #include <vector>
+
+#include <QtWidgets>
 
 #include <QAbstractItemView>
 #include <QButtonGroup>
@@ -44,9 +47,16 @@ QWidget *DashboardWindow::createSummaryCard(const QString &title,
     card->setObjectName("summaryCard");
     card->setStyleSheet(
         "QFrame#summaryCard {"
-        "  background-color: #141a27;"
+        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "                                    stop:0 #1a2135, stop:1 #141a27);"
         "  border: 1px solid #2b3245;"
         "  border-radius: 14px;"
+        "  border-top: 3px solid " + accentColor + ";"
+        "}"
+        "QFrame#summaryCard:hover {"
+        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "                                    stop:0 #1e2436, stop:1 #171f34);"
+        "  border-color: #3a4155;"
         "}"
     );
 
@@ -54,13 +64,13 @@ QWidget *DashboardWindow::createSummaryCard(const QString &title,
     layout->setContentsMargins(18, 16, 18, 16);
 
     auto *titleLabel = new QLabel(title);
-    titleLabel->setStyleSheet("font-size: 13px; font-weight: 600; color: #9ca6bf;");
+    titleLabel->setStyleSheet("font-size: 12px; font-weight: 500; color: #9ca6bf; letter-spacing: 0.5px;");
 
     valueLabel = new QLabel("$0.00");
-    valueLabel->setStyleSheet(QString("font-size: 24px; font-weight: 700; color: %1;").arg(accentColor));
+    valueLabel->setStyleSheet(QString("font-size: 28px; font-weight: 700; color: %1; margin-top: 4px;").arg(accentColor));
 
     layout->addWidget(titleLabel);
-    layout->addSpacing(10);
+    layout->addSpacing(8);
     layout->addWidget(valueLabel);
     layout->addStretch();
 
@@ -101,8 +111,8 @@ bool DashboardWindow::isTransactionInScope(const Transaction& transaction,
 
 void DashboardWindow::setupUi() {
     auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(20, 20, 20, 20);
-    mainLayout->setSpacing(14);
+    mainLayout->setContentsMargins(24, 24, 24, 24);
+    mainLayout->setSpacing(20);
 
     setStyleSheet(
         "DashboardWindow, QWidget {"
@@ -121,7 +131,7 @@ void DashboardWindow::setupUi() {
         "QGroupBox::title {"
         "  subcontrol-origin: margin;"
         "  left: 12px;"
-        "  padding: 0 6px;"
+        "  padding: 0 8px;"
         "  color: #a6afc2;"
         "}"
         "QTableWidget, QListWidget, QComboBox {"
@@ -129,21 +139,58 @@ void DashboardWindow::setupUi() {
         "  border: 1px solid #2b3245;"
         "  border-radius: 10px;"
         "  color: #e5e9f4;"
+        "  selection-background-color: #253355;"
+        "}"
+        "QTableWidget::item {"
+        "  padding: 4px;"
+        "  border-bottom: 1px solid #1e2436;"
+        "}"
+        "QTableWidget::item:selected {"
+        "  background-color: #253355;"
         "}"
         "QHeaderView::section {"
         "  background-color: #171f34;"
         "  color: #aab2c5;"
         "  border: 0;"
-        "  padding: 6px;"
+        "  padding: 8px 6px;"
+        "  font-weight: 600;"
+        "  border-bottom: 2px solid #2b3245;"
+        "}"
+        "QScrollBar:vertical {"
+        "  background-color: #0f1527;"
+        "  width: 12px;"
+        "  border-radius: 6px;"
+        "}"
+        "QScrollBar::handle:vertical {"
+        "  background-color: #2b3245;"
+        "  border-radius: 6px;"
+        "  min-height: 20px;"
+        "}"
+        "QScrollBar::handle:vertical:hover {"
+        "  background-color: #3a4155;"
+        "}"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {"
+        "  border: none;"
+        "  background: none;"
         "}"
     );
 
     auto *topBar = new QHBoxLayout();
     auto *titleLabel = new QLabel("Dashboard");
-    titleLabel->setStyleSheet("font-size: 28px; font-weight: 700;");
+    titleLabel->setStyleSheet(
+        "font-size: 32px; "
+        "font-weight: 700; "
+        "color: #ffffff; "
+        "text-shadow: 0 2px 4px rgba(0,0,0,0.3);"
+    );
 
     auto *subtitleLabel = new QLabel("Track outcomes, monitor trends, and act with confidence.");
-    subtitleLabel->setStyleSheet("font-size: 12px; color: #8d97ac;");
+    subtitleLabel->setStyleSheet(
+        "font-size: 13px; "
+        "color: #8d97ac; "
+        "font-weight: 400; "
+        "margin-top: 2px;"
+    );
 
     auto *headerColumn = new QVBoxLayout();
     headerColumn->addWidget(titleLabel);
@@ -152,9 +199,11 @@ void DashboardWindow::setupUi() {
     auto *filterContainer = new QFrame();
     filterContainer->setStyleSheet(
         "QFrame {"
-        "  background-color: #141a27;"
+        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "                                    stop:0 #1a2135, stop:1 #141a27);"
         "  border: 1px solid #2b3245;"
         "  border-radius: 12px;"
+        "  box-shadow: 0 2px 8px rgba(0,0,0,0.15);"
         "}"
     );
     auto *filterLayout = new QHBoxLayout(filterContainer);
@@ -170,12 +219,26 @@ void DashboardWindow::setupUi() {
             "  color: #9ca6bf;"
             "  border: 1px solid #2b3245;"
             "  border-radius: 8px;"
-            "  padding: 6px 10px;"
+            "  padding: 8px 12px;"
+            "  font-weight: 500;"
+            "  font-size: 12px;"
+            "  transition: all 0.2s ease;"
+            "}"
+            "QPushButton:hover {"
+            "  background-color: #1a2135;"
+            "  border-color: #3a4155;"
+            "  color: #aab2c5;"
             "}"
             "QPushButton:checked {"
-            "  background-color: #253355;"
-            "  color: #e8eeff;"
+            "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+            "                                    stop:0 #4968a8, stop:1 #3a5490);"
+            "  color: #ffffff;"
             "  border-color: #4968a8;"
+            "  font-weight: 600;"
+            "}"
+            "QPushButton:checked:hover {"
+            "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+            "                                    stop:0 #5a7bc0, stop:1 #4968a8);"
             "}"
         );
         return button;
@@ -208,19 +271,156 @@ void DashboardWindow::setupUi() {
     mainLayout->addLayout(topBar);
 
     auto *summaryLayout = new QGridLayout();
-    summaryLayout->setHorizontalSpacing(12);
-    summaryLayout->setVerticalSpacing(12);
+    summaryLayout->setHorizontalSpacing(16);
+    summaryLayout->setVerticalSpacing(16);
     summaryLayout->addWidget(createSummaryCard("Total Income", incomeValueLabel, "#8CF4B8"), 0, 0);
     summaryLayout->addWidget(createSummaryCard("Total Expenses", expensesValueLabel, "#FF9191"), 0, 1);
     summaryLayout->addWidget(createSummaryCard("Liquid Cash", liquidCashValueLabel, "#8CC6FF"), 0, 2);
     summaryLayout->addWidget(createSummaryCard("Savings Rate", savingsRateValueLabel, "#D5B4FF"), 0, 3);
     mainLayout->addLayout(summaryLayout);
 
+    // AI Summary Section
+    auto *aiSummaryBox = new QGroupBox("AI Financial Insights");
+    aiSummaryBox->setStyleSheet(
+        "QGroupBox {"
+        "  border: 2px solid #5b8cff;"
+        "  border-radius: 16px;"
+        "  margin-top: 12px;"
+        "  padding: 16px;"
+        "  background-color: #0f1a33;"
+        "  color: #e5e9f4;"
+        "  font-weight: 600;"
+        "}"
+        "QGroupBox::title {"
+        "  subcontrol-origin: margin;"
+        "  left: 16px;"
+        "  padding: 0 8px;"
+        "  color: #5b8cff;"
+        "  font-size: 16px;"
+        "}"
+    );
+
+    auto *aiSummaryLayout = new QVBoxLayout(aiSummaryBox);
+    aiSummaryLayout->setSpacing(12);
+
+    // AI Summary Header with Generate Button
+    auto *aiHeaderLayout = new QHBoxLayout();
+    aiSummaryTitle = new QLabel("AI-Powered Financial Analysis");
+    aiSummaryTitle->setStyleSheet("font-size: 14px; font-weight: 600; color: #e5e9f4;");
+
+    generateAISummaryButton = new QPushButton("Generate AI Summary");
+    generateAISummaryButton->setStyleSheet(
+        "QPushButton {"
+        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "               stop:0 #5b8cff, stop:1 #4a7ae6);"
+        "  color: #ffffff;"
+        "  border: none;"
+        "  border-radius: 8px;"
+        "  padding: 8px 16px;"
+        "  font-weight: 600;"
+        "  font-size: 12px;"
+        "}"
+        "QPushButton:hover {"
+        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "               stop:0 #6b9cff, stop:1 #5a8af6);"
+        "}"
+        "QPushButton:pressed {"
+        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "               stop:0 #4a7ae6, stop:1 #3a6ad6);"
+        "}"
+        "QPushButton:disabled {"
+        "  background-color: #2a4080;"
+        "  color: #6b7a94;"
+        "}"
+    );
+    generateAISummaryButton->setMinimumWidth(140);
+
+    aiStatusLabel = new QLabel("");
+    aiStatusLabel->setStyleSheet("font-size: 11px; color: #8fa3bf; font-style: italic;");
+
+    aiHeaderLayout->addWidget(aiSummaryTitle);
+    aiHeaderLayout->addStretch();
+    aiHeaderLayout->addWidget(aiStatusLabel);
+    aiHeaderLayout->addWidget(generateAISummaryButton);
+
+    aiSummaryLayout->addLayout(aiHeaderLayout);
+
+    // AI Summary Content
+    aiSummaryText = new QTextEdit();
+    aiSummaryText->setReadOnly(true);
+    aiSummaryText->setMaximumHeight(120);
+    aiSummaryText->setStyleSheet(
+        "QTextEdit {"
+        "  background-color: #1a2f5a;"
+        "  border: 1px solid #2a4080;"
+        "  border-radius: 10px;"
+        "  color: #e1e8fa;"
+        "  padding: 12px;"
+        "  font-size: 12px;"
+        "  line-height: 1.5;"
+        "  selection-background-color: #5b8cff;"
+        "}"
+    );
+    aiSummaryText->setPlaceholderText("Click 'Generate AI Summary' to get personalized financial insights and recommendations based on your spending patterns, budget performance, and financial goals.");
+
+    aiSummaryLayout->addWidget(aiSummaryText);
+
+    // AI Recommendations
+    auto *recommendationsTitle = new QLabel("💡 AI Recommendations");
+    recommendationsTitle->setStyleSheet("font-size: 13px; font-weight: 600; color: #5b8cff; margin-top: 8px;");
+
+    aiRecommendationsList = new QListWidget();
+    aiRecommendationsList->setMaximumHeight(120);
+    aiRecommendationsList->setStyleSheet(
+        "QListWidget {"
+        "  background-color: #1a2f5a;"
+        "  border: 1px solid #2a4080;"
+        "  border-radius: 10px;"
+        "  color: #e1e8fa;"
+        "  font-size: 12px;"
+        "  padding: 8px;"
+        "}"
+        "QListWidget::item {"
+        "  padding: 8px;"
+        "  border-bottom: 1px solid #233d72;"
+        "  background-color: transparent;"
+        "}"
+        "QListWidget::item:hover {"
+        "  background-color: #233d72;"
+        "}"
+        "QListWidget::item:selected {"
+        "  background-color: #2e5aa6;"
+        "  color: #ffffff;"
+        "}"
+    );
+
+    aiSummaryLayout->addWidget(recommendationsTitle);
+    aiSummaryLayout->addWidget(aiRecommendationsList);
+
+    mainLayout->addWidget(aiSummaryBox);
+
     auto *reportsBox = new QGroupBox("Reports");
+    reportsBox->setStyleSheet(
+        "QGroupBox {"
+        "  border: 1px solid #2a4080;"
+        "  border-radius: 14px;"
+        "  margin-top: 12px;"
+        "  padding: 16px;"
+        "  background-color: #0f1a33;"
+        "  color: #e5e9f4;"
+        "  font-weight: 600;"
+        "}"
+        "QGroupBox::title {"
+        "  subcontrol-origin: margin;"
+        "  left: 12px;"
+        "  padding: 0 8px;"
+        "  color: #5b8cff;"
+        "}"
+    );
     auto *reportsLayout = new QVBoxLayout(reportsBox);
 
-    auto *recentTitle = new QLabel("Recent Transactions");
-    recentTitle->setStyleSheet("font-weight: 600; color: #c8d0e3;");
+    auto *recentTitle = new QLabel("📊 Recent Transactions");
+    recentTitle->setStyleSheet("font-weight: 700; color: #5b8cff; font-size: 14px; margin-bottom: 8px;");
 
     recentTransactionsTable = new QTableWidget();
     recentTransactionsTable->setColumnCount(4);
@@ -229,22 +429,68 @@ void DashboardWindow::setupUi() {
     recentTransactionsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     recentTransactionsTable->setSelectionMode(QAbstractItemView::SingleSelection);
     recentTransactionsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    recentTransactionsTable->setStyleSheet(
+        "QTableWidget, QListWidget {"
+        "  background-color: #1a2f5a;"
+        "  border: 1px solid #2a4080;"
+        "  border-radius: 10px;"
+        "  color: #e5e9f4;"
+        "  selection-background-color: #2e5aa6;"
+        "}"
+        "QTableWidget::item {"
+        "  padding: 8px;"
+        "  border-bottom: 1px solid #233d72;"
+        "}"
+        "QTableWidget::item:selected {"
+        "  background-color: #2e5aa6;"
+        "}"
+        "QHeaderView::section {"
+        "  background-color: #0f1a33;"
+        "  color: #5b8cff;"
+        "  border: 0;"
+        "  padding: 8px 6px;"
+        "  font-weight: 700;"
+        "  border-bottom: 2px solid #2a4080;"
+        "}"
+    );
 
-    auto *categoriesTitle = new QLabel("Top Spending Categories");
-    categoriesTitle->setStyleSheet("font-weight: 600; color: #c8d0e3;");
+    auto *categoriesTitle = new QLabel("🏷️ Top Spending Categories");
+    categoriesTitle->setStyleSheet("font-weight: 700; color: #5b8cff; font-size: 14px; margin-top: 16px; margin-bottom: 8px;");
     topCategoriesList = new QListWidget();
+    topCategoriesList->setStyleSheet(
+        "QListWidget {"
+        "  background-color: #1a2f5a;"
+        "  border: 1px solid #2a4080;"
+        "  border-radius: 10px;"
+        "  color: #e5e9f4;"
+        "  font-size: 12px;"
+        "  padding: 8px;"
+        "}"
+        "QListWidget::item {"
+        "  padding: 8px;"
+        "  border-bottom: 1px solid #233d72;"
+        "  background-color: transparent;"
+        "}"
+        "QListWidget::item:hover {"
+        "  background-color: #233d72;"
+        "}"
+        "QListWidget::item:selected {"
+        "  background-color: #2e5aa6;"
+        "}"
+    );
 
-    auto *budgetHealthTitle = new QLabel("Budget Performance");
-    budgetHealthTitle->setStyleSheet("font-weight: 600; color: #c8d0e3;");
+    auto *budgetHealthTitle = new QLabel("💰 Budget Performance");
+    budgetHealthTitle->setStyleSheet("font-weight: 700; color: #5b8cff; font-size: 14px; margin-top: 16px; margin-bottom: 8px;");
 
     budgetHealthLabel = new QLabel("No data");
     budgetHealthLabel->setWordWrap(true);
     budgetHealthLabel->setStyleSheet(
-        "background-color: #0f1527;"
-        "border: 1px solid #2b3245;"
+        "background-color: #1a2f5a;"
+        "border: 1px solid #2a4080;"
         "border-radius: 10px;"
-        "padding: 10px;"
+        "padding: 12px;"
         "color: #e1e8fa;"
+        "line-height: 1.5;"
     );
 
     reportsLayout->addWidget(recentTitle);
@@ -274,6 +520,9 @@ void DashboardWindow::setupUi() {
     connect(monthSelector, &QComboBox::currentIndexChanged, this, [this](int) {
         refreshData();
     });
+
+    // AI Summary connections
+    connect(generateAISummaryButton, &QPushButton::clicked, this, &DashboardWindow::generateAISummary);
 }
 
 void DashboardWindow::refreshData() {
@@ -285,8 +534,17 @@ void DashboardWindow::refreshData() {
         recentTransactionsTable->setRowCount(0);
         topCategoriesList->clear();
         budgetHealthLabel->setText("No user is signed in.");
+
+        // Clear AI summary for logged out user
+        aiSummaryText->clear();
+        aiRecommendationsList->clear();
+        aiStatusLabel->setText("");
+        generateAISummaryButton->setEnabled(false);
+
         return;
     }
+
+    generateAISummaryButton->setEnabled(true);
 
     YearMonth period {};
     if (!selectedYearMonth(period)) {
@@ -370,4 +628,93 @@ void DashboardWindow::refreshData() {
         budgetLines << "Budget breakdown is available in Monthly view.";
     }
     budgetHealthLabel->setText(budgetLines.isEmpty() ? "No budget data available." : budgetLines.join("\n"));
+}
+
+void DashboardWindow::generateAISummary() {
+    if (userId_.empty()) {
+        aiStatusLabel->setText("No user signed in");
+        return;
+    }
+
+    // Disable button and show loading state
+    generateAISummaryButton->setEnabled(false);
+    generateAISummaryButton->setText("Analyzing...");
+    generateAISummaryButton->setStyleSheet(
+        "QPushButton {"
+        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "                                    stop:0 #2d4270, stop:1 #1e2436);"
+        "  color: #6b7688;"
+        "  border: none;"
+        "  border-radius: 8px;"
+        "  padding: 8px 16px;"
+        "  font-weight: 600;"
+        "  font-size: 12px;"
+        "}"
+    );
+
+    aiStatusLabel->setText("🔄 Analyzing your financial data...");
+    aiStatusLabel->setStyleSheet("font-size: 11px; color: #8cc6ff; font-style: italic; font-weight: 500;");
+    aiSummaryText->setPlaceholderText("Generating personalized insights...");
+    aiSummaryText->clear();
+    aiRecommendationsList->clear();
+
+    // Get current period
+    YearMonth period {};
+    if (!selectedYearMonth(period)) {
+        const QDate today = QDate::currentDate();
+        period = YearMonth {today.year(), today.month()};
+    }
+
+    try {
+        // Generate AI insight using the backend
+        const auto insight = backend_.ai().generateDashboardInsight(
+            userId_,
+            period,
+            backend_.analytics(),
+            backend_.transactions(),
+            backend_.budgets(),
+            backend_.savings(),
+            backend_.goals()
+        );
+
+        // Update UI with results
+        aiSummaryText->setPlainText(QString::fromStdString(insight.summary));
+
+        aiRecommendationsList->clear();
+        for (const auto& recommendation : insight.recommendations) {
+            aiRecommendationsList->addItem("💡 " + QString::fromStdString(recommendation));
+        }
+
+        aiStatusLabel->setText("✅ Analysis complete");
+        aiStatusLabel->setStyleSheet("font-size: 11px; color: #8cf4b8; font-style: italic; font-weight: 500;");
+
+    } catch (const std::exception& e) {
+        aiSummaryText->setPlainText("Unable to generate AI summary. Please check your API configuration and ensure you have set up your OpenRouter API key in the .env file.");
+        aiStatusLabel->setText("❌ Error: " + QString::fromStdString(e.what()));
+        aiStatusLabel->setStyleSheet("font-size: 11px; color: #ff9191; font-style: italic; font-weight: 500;");
+    }
+
+    // Re-enable button and restore style
+    generateAISummaryButton->setEnabled(true);
+    generateAISummaryButton->setText("Generate AI Summary");
+    generateAISummaryButton->setStyleSheet(
+        "QPushButton {"
+        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "                                    stop:0 #4968a8, stop:1 #3a5490);"
+        "  color: #ffffff;"
+        "  border: none;"
+        "  border-radius: 8px;"
+        "  padding: 8px 16px;"
+        "  font-weight: 600;"
+        "  font-size: 12px;"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "                                    stop:0 #5a7bc0, stop:1 #4968a8);"
+        "}"
+        "QPushButton:pressed {"
+        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "                                    stop:0 #3a5490, stop:1 #2d4270);"
+        "}"
+    );
 }

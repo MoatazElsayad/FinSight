@@ -1,0 +1,14 @@
+/mnt/c/Users/moael/Programming/FinSight/build_test/CMakeFiles/finsight_core.dir
+/mnt/c/Users/moael/Programming/FinSight/build_test/CMakeFiles/finsight_backend_demo.dir
+/mnt/c/Users/moael/Programming/FinSight/build_test/CMakeFiles/finsight_terminal_demo.dir
+/mnt/c/Users/moael/Programming/FinSight/build_test/CMakeFiles/finsight_gui.dir
+/mnt/c/Users/moael/Programming/FinSight/build_test/CMakeFiles/edit_cache.dir
+/mnt/c/Users/moael/Programming/FinSight/build_test/CMakeFiles/rebuild_cache.dir
+/mnt/c/Users/moael/Programming/FinSight/build_test/CMakeFiles/finsight_core_autogen_timestamp_deps.dir
+/mnt/c/Users/moael/Programming/FinSight/build_test/CMakeFiles/finsight_core_autogen.dir
+/mnt/c/Users/moael/Programming/FinSight/build_test/CMakeFiles/finsight_backend_demo_autogen_timestamp_deps.dir
+/mnt/c/Users/moael/Programming/FinSight/build_test/CMakeFiles/finsight_backend_demo_autogen.dir
+/mnt/c/Users/moael/Programming/FinSight/build_test/CMakeFiles/finsight_terminal_demo_autogen_timestamp_deps.dir
+/mnt/c/Users/moael/Programming/FinSight/build_test/CMakeFiles/finsight_terminal_demo_autogen.dir
+/mnt/c/Users/moael/Programming/FinSight/build_test/CMakeFiles/finsight_gui_autogen_timestamp_deps.dir
+/mnt/c/Users/moael/Programming/FinSight/build_test/CMakeFiles/finsight_gui_autogen.dir

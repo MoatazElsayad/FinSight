@@ -4,6 +4,7 @@
 
 #include <iostream>
 #include <string>
+#include <vector>
 
 using namespace std;
 
@@ -27,11 +28,39 @@ int main() {
     using finsight::core::utils::EnvLoader;
     using finsight::data::storage::BackendStore;
 
-    // Loads environment values from the nearest .env file before building the AI config.
-    EnvLoader::loadFromNearestFile();
-    const string apiUrl = EnvLoader::get("FINSIGHT_OPENROUTER_API_URL", "https://openrouter.ai/api/v1/chat/completions");
+    // Loads environment values from the .env file
+    // Try multiple possible locations including absolute paths
+    bool envLoaded = false;
+    const vector<string> possibleEnvPaths = {
+        ".env",
+        "./.env", 
+        "../.env",
+        "../../.env",
+        "../../../.env",
+        "/mnt/c/Users/moael/Programming/FinSight/.env",
+        "C:\\Users\\moael\\Programming\\FinSight\\.env"
+    };
+    
+    for (const auto& path : possibleEnvPaths) {
+        if (EnvLoader::loadFile(path)) {
+            envLoaded = true;
+            cout << "Loaded .env from: " << path << endl;
+            break;
+        }
+    }
+    
+    if (!envLoaded) {
+        cout << "Trying loadFromNearestFile..." << endl;
+        EnvLoader::loadFromNearestFile();
+    }
+    
+    // Debug: Check if API key was loaded
     const string apiKey = EnvLoader::get("FINSIGHT_OPENROUTER_API_KEY", "PASTE_REAL_API_KEY_HERE");
-    const string primaryModel = EnvLoader::get("FINSIGHT_OPENROUTER_MODEL", "liquid/lfm-2.5-1.2b-instruct:free");
+    if (apiKey == "PASTE_REAL_API_KEY_HERE") {
+        cout << "Warning: API key not loaded from .env file. Using placeholder." << endl;
+    }
+    const string apiUrl = EnvLoader::get("FINSIGHT_OPENROUTER_API_URL", "https://openrouter.ai/api/v1/chat/completions");
+    const string primaryModel = EnvLoader::get("FINSIGHT_OPENROUTER_MODEL", "mistralai/mistral-small-3.1-24b-instruct:free");
     const bool emailEnabled = EnvLoader::getBool("FINSIGHT_EMAIL_ENABLED", false);
     const string emailApiUrl = EnvLoader::get("FINSIGHT_RESEND_API_URL", "https://api.resend.com/emails");
     const string emailApiKey = EnvLoader::get("FINSIGHT_RESEND_API_KEY", "PASTE_REAL_RESEND_API_KEY_HERE");
@@ -45,11 +74,16 @@ int main() {
         .apiKey = apiKey,
         .model = primaryModel,
         .fallbackModels = {
-            "liquid/lfm-2.5-1.2b-thinking:free",
+            "mistralai/mistral-small-3.1-24b-instruct:free",
             "meta-llama/llama-3.3-70b-instruct:free",
-            "qwen/qwen3-coder:free",
             "deepseek/deepseek-r1-0528:free",
-            "mistralai/mistral-small-3.1-24b-instruct:free"
+            "qwen/qwen3-coder:free",
+            "google/gemma-3-27b-it:free",
+            "mistralai/mistral-7b-instruct:free",
+            "qwen/qwen-2.5-vl-7b-instruct:free",
+            "liquid/lfm-2.5-1.2b-instruct:free",
+            "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+            "meta-llama/llama-3.2-3b-instruct:free"
         },
         .appName = "FinSight",
         .appUrl = "https://example.com/finsight",
