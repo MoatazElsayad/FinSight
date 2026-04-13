@@ -1,29 +1,60 @@
 #include "gui/dashboard/DashboardWindow.h"
 
+#include "core/models/AI.h"
+
 #include <algorithm>
 #include <exception>
-#include <map>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
+#include <QBrush>
+#include <QColor>
 #include <QtWidgets>
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QtConcurrent/QtConcurrentRun>
+#else
+#include <QtConcurrentRun>
+#endif
+
 #include <QAbstractItemView>
+#include <QEasingCurve>
 #include <QButtonGroup>
 #include <QComboBox>
 #include <QDate>
 #include <QFrame>
+#include <QGraphicsOpacityEffect>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QListWidget>
+#include <QMetaObject>
+#include <QPropertyAnimation>
 #include <QPushButton>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QTimer>
 #include <QVBoxLayout>
 
 using namespace finsight::core::models;
+
+namespace {
+
+QString displayModelName(const std::string& modelId) {
+    QString q = QString::fromStdString(modelId);
+    const int slash = q.lastIndexOf(QLatin1Char('/'));
+    if (slash >= 0) {
+        q = q.mid(slash + 1);
+    }
+    q.replace(QLatin1Char('-'), QLatin1Char(' '));
+    q.replace(QLatin1Char(':'), QLatin1Char(' '));
+    return q.trimmed();
+}
+
+}  // namespace
 
 DashboardWindow::DashboardWindow(finsight::core::managers::FinanceTrackerBackend& backend,
                                  const std::string& userId,
@@ -33,6 +64,21 @@ DashboardWindow::DashboardWindow(finsight::core::managers::FinanceTrackerBackend
       userId_(userId) {
     setupUi();
     configureMonthSelector();
+
+    aiProgressWatchdog_.setParent(this);
+    aiProgressWatchdog_.setSingleShot(true);
+    connect(&aiProgressWatchdog_, &QTimer::timeout, this, &DashboardWindow::onAiProgressWatchdogTimeout);
+    if (aiSparklesLabel != nullptr) {
+        aiSparklesOpacity_ = new QGraphicsOpacityEffect(aiSparklesLabel);
+        aiSparklesLabel->setGraphicsEffect(aiSparklesOpacity_);
+        aiSparklesPulse_ = new QPropertyAnimation(aiSparklesOpacity_, "opacity", this);
+        aiSparklesPulse_->setDuration(900);
+        aiSparklesPulse_->setStartValue(0.35);
+        aiSparklesPulse_->setEndValue(1.0);
+        aiSparklesPulse_->setEasingCurve(QEasingCurve::InOutQuad);
+        aiSparklesPulse_->setLoopCount(-1);
+    }
+
     refreshData();
 }
 
@@ -308,7 +354,7 @@ void DashboardWindow::setupUi() {
     aiSummaryTitle = new QLabel("AI-Powered Financial Analysis");
     aiSummaryTitle->setStyleSheet("font-size: 14px; font-weight: 600; color: #e5e9f4;");
 
-    generateAISummaryButton = new QPushButton("Generate AI Summary");
+    generateAISummaryButton = new QPushButton(QStringLiteral("✨ Generate Insights"));
     generateAISummaryButton->setStyleSheet(
         "QPushButton {"
         "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
@@ -338,12 +384,36 @@ void DashboardWindow::setupUi() {
     aiStatusLabel = new QLabel("");
     aiStatusLabel->setStyleSheet("font-size: 11px; color: #8fa3bf; font-style: italic;");
 
+    aiModelLabel = new QLabel("");
+    aiModelLabel->setStyleSheet("font-size: 10px; color: #6b7a94; background-color: #1a2f5a; padding: 2px 8px; border-radius: 4px;");
+    aiModelLabel->setVisible(false);
+
     aiHeaderLayout->addWidget(aiSummaryTitle);
     aiHeaderLayout->addStretch();
+    aiHeaderLayout->addWidget(aiModelLabel);
     aiHeaderLayout->addWidget(aiStatusLabel);
     aiHeaderLayout->addWidget(generateAISummaryButton);
 
     aiSummaryLayout->addLayout(aiHeaderLayout);
+
+    aiLoadingFrame = new QFrame();
+    aiLoadingFrame->setVisible(false);
+    aiLoadingFrame->setStyleSheet("QFrame { background-color: transparent; border: none; }");
+    auto *loadingLayout = new QVBoxLayout(aiLoadingFrame);
+    loadingLayout->setContentsMargins(8, 16, 8, 16);
+    loadingLayout->setSpacing(10);
+    aiSparklesLabel = new QLabel(QStringLiteral("✨"));
+    aiSparklesLabel->setAlignment(Qt::AlignCenter);
+    aiSparklesLabel->setStyleSheet("font-size: 42px; background: transparent;");
+    aiLoadingSubLabel = new QLabel();
+    aiLoadingSubLabel->setAlignment(Qt::AlignCenter);
+    aiLoadingSubLabel->setWordWrap(true);
+    aiLoadingSubLabel->setStyleSheet("font-size: 12px; color: #9bb7e8; padding: 0 12px;");
+    loadingLayout->addStretch(1);
+    loadingLayout->addWidget(aiSparklesLabel);
+    loadingLayout->addWidget(aiLoadingSubLabel);
+    loadingLayout->addStretch(1);
+    aiSummaryLayout->addWidget(aiLoadingFrame);
 
     // AI Summary Content
     aiSummaryText = new QTextEdit();
@@ -361,7 +431,8 @@ void DashboardWindow::setupUi() {
         "  selection-background-color: #5b8cff;"
         "}"
     );
-    aiSummaryText->setPlaceholderText("Click 'Generate AI Summary' to get personalized financial insights and recommendations based on your spending patterns, budget performance, and financial goals.");
+    aiSummaryText->setPlaceholderText(
+        QStringLiteral("Unlock AI insights for this period—spending patterns, budget health, and practical next steps."));
 
     aiSummaryLayout->addWidget(aiSummaryText);
 
@@ -397,48 +468,45 @@ void DashboardWindow::setupUi() {
     aiSummaryLayout->addWidget(recommendationsTitle);
     aiSummaryLayout->addWidget(aiRecommendationsList);
 
-    mainLayout->addWidget(aiSummaryBox);
-
-    auto *reportsBox = new QGroupBox("Reports");
-    reportsBox->setStyleSheet(
-        "QGroupBox {"
-        "  border: 1px solid #2a4080;"
-        "  border-radius: 14px;"
-        "  margin-top: 12px;"
-        "  padding: 16px;"
-        "  background-color: #0f1a33;"
-        "  color: #e5e9f4;"
-        "  font-weight: 600;"
-        "}"
-        "QGroupBox::title {"
-        "  subcontrol-origin: margin;"
-        "  left: 12px;"
-        "  padding: 0 8px;"
-        "  color: #5b8cff;"
-        "}"
-    );
-    auto *reportsLayout = new QVBoxLayout(reportsBox);
-
-    auto *recentTitle = new QLabel("📊 Recent Transactions");
-    recentTitle->setStyleSheet("font-weight: 700; color: #5b8cff; font-size: 14px; margin-bottom: 8px;");
+    auto *recentTitle = new QLabel(QStringLiteral("Latest transactions"));
+    recentTitle->setStyleSheet(
+        "font-size: 13px; font-weight: 600; color: #5b8cff; margin-top: 12px;");
 
     recentTransactionsTable = new QTableWidget();
-    recentTransactionsTable->setColumnCount(4);
-    recentTransactionsTable->setHorizontalHeaderLabels({"Date", "Title", "Type", "Amount"});
-    recentTransactionsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    recentTransactionsTable->setColumnCount(5);
+    recentTransactionsTable->setHorizontalHeaderLabels(
+        {QStringLiteral("Date"),
+         QStringLiteral("Title"),
+         QStringLiteral("Type"),
+         QStringLiteral("Category"),
+         QStringLiteral("Amount")});
+    recentTransactionsTable->verticalHeader()->setVisible(false);
+    recentTransactionsTable->setShowGrid(false);
+    recentTransactionsTable->setAlternatingRowColors(true);
     recentTransactionsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     recentTransactionsTable->setSelectionMode(QAbstractItemView::SingleSelection);
     recentTransactionsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    recentTransactionsTable->setMinimumHeight(200);
+    recentTransactionsTable->setMaximumHeight(320);
+    {
+        auto *header = recentTransactionsTable->horizontalHeader();
+        header->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+        header->setSectionResizeMode(1, QHeaderView::Stretch);
+        header->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+        header->setSectionResizeMode(3, QHeaderView::Stretch);
+        header->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+    }
     recentTransactionsTable->setStyleSheet(
-        "QTableWidget, QListWidget {"
+        "QTableWidget {"
         "  background-color: #1a2f5a;"
         "  border: 1px solid #2a4080;"
         "  border-radius: 10px;"
         "  color: #e5e9f4;"
         "  selection-background-color: #2e5aa6;"
+        "  alternate-background-color: #15284a;"
         "}"
         "QTableWidget::item {"
-        "  padding: 8px;"
+        "  padding: 8px 6px;"
         "  border-bottom: 1px solid #233d72;"
         "}"
         "QTableWidget::item:selected {"
@@ -454,53 +522,10 @@ void DashboardWindow::setupUi() {
         "}"
     );
 
-    auto *categoriesTitle = new QLabel("🏷️ Top Spending Categories");
-    categoriesTitle->setStyleSheet("font-weight: 700; color: #5b8cff; font-size: 14px; margin-top: 16px; margin-bottom: 8px;");
-    topCategoriesList = new QListWidget();
-    topCategoriesList->setStyleSheet(
-        "QListWidget {"
-        "  background-color: #1a2f5a;"
-        "  border: 1px solid #2a4080;"
-        "  border-radius: 10px;"
-        "  color: #e5e9f4;"
-        "  font-size: 12px;"
-        "  padding: 8px;"
-        "}"
-        "QListWidget::item {"
-        "  padding: 8px;"
-        "  border-bottom: 1px solid #233d72;"
-        "  background-color: transparent;"
-        "}"
-        "QListWidget::item:hover {"
-        "  background-color: #233d72;"
-        "}"
-        "QListWidget::item:selected {"
-        "  background-color: #2e5aa6;"
-        "}"
-    );
+    aiSummaryLayout->addWidget(recentTitle);
+    aiSummaryLayout->addWidget(recentTransactionsTable);
 
-    auto *budgetHealthTitle = new QLabel("💰 Budget Performance");
-    budgetHealthTitle->setStyleSheet("font-weight: 700; color: #5b8cff; font-size: 14px; margin-top: 16px; margin-bottom: 8px;");
-
-    budgetHealthLabel = new QLabel("No data");
-    budgetHealthLabel->setWordWrap(true);
-    budgetHealthLabel->setStyleSheet(
-        "background-color: #1a2f5a;"
-        "border: 1px solid #2a4080;"
-        "border-radius: 10px;"
-        "padding: 12px;"
-        "color: #e1e8fa;"
-        "line-height: 1.5;"
-    );
-
-    reportsLayout->addWidget(recentTitle);
-    reportsLayout->addWidget(recentTransactionsTable, 2);
-    reportsLayout->addWidget(categoriesTitle);
-    reportsLayout->addWidget(topCategoriesList, 1);
-    reportsLayout->addWidget(budgetHealthTitle);
-    reportsLayout->addWidget(budgetHealthLabel);
-
-    mainLayout->addWidget(reportsBox, 1);
+    mainLayout->addWidget(aiSummaryBox, 1);
 
     connect(monthlyFilterButton, &QPushButton::clicked, this, [this]() {
         activeTimeRange_ = TimeRange::Monthly;
@@ -527,18 +552,19 @@ void DashboardWindow::setupUi() {
 
 void DashboardWindow::refreshData() {
     if (userId_.empty()) {
+        cancelPendingAiSummaryUi();
+
         incomeValueLabel->setText("$0.00");
         expensesValueLabel->setText("$0.00");
         liquidCashValueLabel->setText("$0.00");
         savingsRateValueLabel->setText("0.00%");
         recentTransactionsTable->setRowCount(0);
-        topCategoriesList->clear();
-        budgetHealthLabel->setText("No user is signed in.");
 
         // Clear AI summary for logged out user
         aiSummaryText->clear();
         aiRecommendationsList->clear();
         aiStatusLabel->setText("");
+        aiModelLabel->setVisible(false);
         generateAISummaryButton->setEnabled(false);
 
         return;
@@ -554,8 +580,6 @@ void DashboardWindow::refreshData() {
 
     double income = 0.0;
     double expenses = 0.0;
-    std::map<std::string, double> expenseByCategory;
-    std::vector<Transaction> scopedTransactions;
 
     const auto transactions = backend_.transactions().listTransactions(userId_);
     for (const auto& transaction : transactions) {
@@ -563,18 +587,12 @@ void DashboardWindow::refreshData() {
             continue;
         }
 
-        scopedTransactions.push_back(transaction);
         if (transaction.type == TransactionType::Income) {
             income += transaction.amount;
         } else {
             expenses += transaction.amount;
-            expenseByCategory[transaction.categoryId] += transaction.amount;
         }
     }
-
-    std::sort(scopedTransactions.begin(), scopedTransactions.end(), [](const auto& left, const auto& right) {
-        return left.date > right.date;
-    });
 
     const double netSavings = income - expenses;
     const double savingsRate = income <= 0.0 ? 0.0 : netSavings / income;
@@ -584,61 +602,115 @@ void DashboardWindow::refreshData() {
     liquidCashValueLabel->setText("$" + QString::number(netSavings, 'f', 2));
     savingsRateValueLabel->setText(QString::number(savingsRate * 100.0, 'f', 2) + "%");
 
-    recentTransactionsTable->setRowCount(0);
-    const int recentCount = std::min<int>(static_cast<int>(scopedTransactions.size()), 6);
+    std::vector<Transaction> latestAll = backend_.transactions().listTransactions(userId_);
+    std::sort(latestAll.begin(), latestAll.end(), [](const auto& left, const auto& right) {
+        return left.date > right.date;
+    });
+    const int recentCount = std::min<int>(static_cast<int>(latestAll.size()), 10);
     recentTransactionsTable->setRowCount(recentCount);
     for (int index = 0; index < recentCount; ++index) {
-        const auto& transaction = scopedTransactions[static_cast<size_t>(index)];
-        recentTransactionsTable->setItem(index, 0, new QTableWidgetItem(QString::fromStdString(transaction.date.toString())));
-        recentTransactionsTable->setItem(index, 1, new QTableWidgetItem(QString::fromStdString(transaction.title)));
+        const auto& transaction = latestAll[static_cast<size_t>(index)];
+        recentTransactionsTable->setItem(index, 0,
+            new QTableWidgetItem(QString::fromStdString(transaction.date.toString())));
+        recentTransactionsTable->setItem(index, 1,
+            new QTableWidgetItem(QString::fromStdString(transaction.title)));
         recentTransactionsTable->setItem(index, 2, new QTableWidgetItem(
-            transaction.type == TransactionType::Income ? "Income" : "Expense"));
-        recentTransactionsTable->setItem(index, 3, new QTableWidgetItem("$" + QString::number(transaction.amount, 'f', 2)));
-    }
+            transaction.type == TransactionType::Income ? QStringLiteral("Income") : QStringLiteral("Expense")));
 
-    std::vector<std::pair<std::string, double>> sortedCategories(expenseByCategory.begin(), expenseByCategory.end());
-    std::sort(sortedCategories.begin(), sortedCategories.end(), [](const auto& left, const auto& right) {
-        return left.second > right.second;
-    });
-
-    topCategoriesList->clear();
-    for (const auto& [categoryId, amount] : sortedCategories) {
-        const auto& category = backend_.transactions().requireCategory(categoryId);
-        topCategoriesList->addItem(QString::fromStdString(category.name) + " • $" + QString::number(amount, 'f', 2));
-    }
-    if (sortedCategories.empty()) {
-        topCategoriesList->addItem("No expense activity for selected period.");
-    }
-
-    QStringList budgetLines;
-    if (activeTimeRange_ == TimeRange::Monthly) {
-        const auto statuses = backend_.budgets().summarizeBudgets(userId_, period, backend_.transactions());
-        for (const auto& status : statuses) {
-            const auto& category = backend_.transactions().requireCategory(status.budget.categoryId);
-            QString line = QString("%1: $%2 / $%3")
-                               .arg(QString::fromStdString(category.name))
-                               .arg(QString::number(status.spent, 'f', 2))
-                               .arg(QString::number(status.budget.limit, 'f', 2));
-            if (status.overspent) {
-                line += " (Over budget)";
-            }
-            budgetLines << line;
+        QString categoryLabel = QStringLiteral("—");
+        try {
+            const auto& category = backend_.transactions().requireCategory(transaction.categoryId);
+            categoryLabel = QString::fromStdString(category.name);
+        } catch (const std::out_of_range&) {
         }
-    } else {
-        budgetLines << "Budget breakdown is available in Monthly view.";
+        recentTransactionsTable->setItem(index, 3, new QTableWidgetItem(categoryLabel));
+
+        auto *amountItem = new QTableWidgetItem(QStringLiteral("$") + QString::number(transaction.amount, 'f', 2));
+        amountItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        if (transaction.type == TransactionType::Income) {
+            amountItem->setForeground(QBrush(QColor(QStringLiteral("#8CF4B8"))));
+        } else {
+            amountItem->setForeground(QBrush(QColor(QStringLiteral("#FF9191"))));
+        }
+        recentTransactionsTable->setItem(index, 4, amountItem);
     }
-    budgetHealthLabel->setText(budgetLines.isEmpty() ? "No budget data available." : budgetLines.join("\n"));
 }
 
 void DashboardWindow::generateAISummary() {
     if (userId_.empty()) {
-        aiStatusLabel->setText("No user signed in");
+        aiStatusLabel->setText(QStringLiteral("No user signed in"));
         return;
     }
 
-    // Disable button and show loading state
+    YearMonth period {};
+    if (!selectedYearMonth(period)) {
+        const QDate today = QDate::currentDate();
+        period = YearMonth {today.year(), today.month()};
+    }
+
+    beginAiSummaryGeneration(period);
+}
+
+void DashboardWindow::cancelPendingAiSummaryUi() {
+    ++aiRunGeneration_;
+    aiProgressWatchdog_.stop();
+    if (aiSparklesPulse_ != nullptr) {
+        aiSparklesPulse_->stop();
+    }
+    if (aiLoadingFrame != nullptr) {
+        aiLoadingFrame->setVisible(false);
+    }
+    if (aiSummaryText != nullptr) {
+        aiSummaryText->setVisible(true);
+    }
+    if (aiSummaryTitle != nullptr) {
+        aiSummaryTitle->setText(QStringLiteral("AI-Powered Financial Analysis"));
+    }
+    if (aiLoadingSubLabel != nullptr) {
+        aiLoadingSubLabel->clear();
+    }
+    resetAiSummaryButtonStyle();
+    generateAISummaryButton->setText(QStringLiteral("✨ Generate Insights"));
     generateAISummaryButton->setEnabled(false);
-    generateAISummaryButton->setText("Analyzing...");
+}
+
+void DashboardWindow::resetAiSummaryButtonStyle() {
+    generateAISummaryButton->setStyleSheet(
+        "QPushButton {"
+        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "               stop:0 #5b8cff, stop:1 #4a7ae6);"
+        "  color: #ffffff;"
+        "  border: none;"
+        "  border-radius: 8px;"
+        "  padding: 8px 16px;"
+        "  font-weight: 600;"
+        "  font-size: 12px;"
+        "}"
+        "QPushButton:hover {"
+        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "               stop:0 #6b9cff, stop:1 #5a8af6);"
+        "}"
+        "QPushButton:pressed {"
+        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "               stop:0 #4a7ae6, stop:1 #3a6ad6);"
+        "}"
+        "QPushButton:disabled {"
+        "  background-color: #2a4080;"
+        "  color: #6b7a94;"
+        "}");
+}
+
+void DashboardWindow::beginAiSummaryGeneration(const YearMonth& period) {
+    ++aiRunGeneration_;
+    const int generation = aiRunGeneration_;
+    aiWatchdogGeneration_ = generation;
+    aiStreamProgressSeenForRun_ = false;
+    aiInsightAppliedForRun_ = false;
+    aiFallbackJobStarted_ = false;
+    aiPendingYearMonth_ = period;
+
+    generateAISummaryButton->setEnabled(false);
+    generateAISummaryButton->setText(QStringLiteral("Analyzing…"));
     generateAISummaryButton->setStyleSheet(
         "QPushButton {"
         "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
@@ -652,69 +724,261 @@ void DashboardWindow::generateAISummary() {
         "}"
     );
 
-    aiStatusLabel->setText("🔄 Analyzing your financial data...");
-    aiStatusLabel->setStyleSheet("font-size: 11px; color: #8cc6ff; font-style: italic; font-weight: 500;");
-    aiSummaryText->setPlaceholderText("Generating personalized insights...");
+    aiStatusLabel->setText(QStringLiteral("✨ Analyzing your finances…"));
+    aiStatusLabel->setStyleSheet(QStringLiteral("font-size: 11px; color: #8cc6ff; font-style: italic; font-weight: 500;"));
+    aiSummaryTitle->setText(QStringLiteral("Analyzing Your Finances…"));
+    if (aiLoadingSubLabel != nullptr) {
+        aiLoadingSubLabel->clear();
+    }
+    aiSummaryText->setPlaceholderText(QStringLiteral("Generating personalized insights…"));
     aiSummaryText->clear();
     aiRecommendationsList->clear();
-
-    // Get current period
-    YearMonth period {};
-    if (!selectedYearMonth(period)) {
-        const QDate today = QDate::currentDate();
-        period = YearMonth {today.year(), today.month()};
+    aiModelLabel->setVisible(false);
+    aiSummaryText->setVisible(false);
+    if (aiLoadingFrame != nullptr) {
+        aiLoadingFrame->setVisible(true);
+    }
+    if (aiSparklesPulse_ != nullptr) {
+        aiSparklesPulse_->start();
     }
 
-    try {
-        // Generate AI insight using the backend
-        const auto insight = backend_.ai().generateDashboardInsight(
-            userId_,
-            period,
-            backend_.analytics(),
-            backend_.transactions(),
-            backend_.budgets(),
-            backend_.savings(),
-            backend_.goals()
-        );
+    const std::string userCopy = userId_;
+    finsight::core::managers::FinanceTrackerBackend *backend = &backend_;
+    const YearMonth periodCopy = period;
 
-        // Update UI with results
-        aiSummaryText->setPlainText(QString::fromStdString(insight.summary));
+    aiProgressWatchdog_.start(5000);
 
-        aiRecommendationsList->clear();
-        for (const auto& recommendation : insight.recommendations) {
-            aiRecommendationsList->addItem("💡 " + QString::fromStdString(recommendation));
+    (void)QtConcurrent::run([this, backend, userCopy, periodCopy, generation]() {
+        try {
+            const auto insight = backend->ai().generateDashboardInsight(
+                userCopy,
+                periodCopy,
+                backend->analytics(),
+                backend->transactions(),
+                backend->budgets(),
+                backend->savings(),
+                backend->goals(),
+                [this, generation](const std::string& event, const std::string& model, const std::string& detail) {
+                    QMetaObject::invokeMethod(
+                        this,
+                        [this, generation, event, model, detail]() {
+                            if (generation != aiRunGeneration_) {
+                                return;
+                            }
+                            dispatchAiStreamEvent(QString::fromStdString(event),
+                                                  QString::fromStdString(model),
+                                                  QString::fromStdString(detail));
+                        },
+                        Qt::QueuedConnection);
+                });
+
+            QMetaObject::invokeMethod(
+                this,
+                [this, generation, insight]() {
+                    if (generation != aiRunGeneration_) {
+                        return;
+                    }
+                    if (aiInsightAppliedForRun_) {
+                        return;
+                    }
+                    aiInsightAppliedForRun_ = true;
+                    aiProgressWatchdog_.stop();
+                    applyAiDashboardInsight(generation, insight);
+                },
+                Qt::QueuedConnection);
+        } catch (const std::exception& ex) {
+            QMetaObject::invokeMethod(
+                this,
+                [this, generation, msg = QString::fromUtf8(ex.what())]() {
+                    if (generation != aiRunGeneration_) {
+                        return;
+                    }
+                    if (aiInsightAppliedForRun_) {
+                        return;
+                    }
+                    aiInsightAppliedForRun_ = true;
+                    aiProgressWatchdog_.stop();
+                    applyAiDashboardRequestFailure(generation, msg);
+                },
+                Qt::QueuedConnection);
         }
+    });
+}
 
-        aiStatusLabel->setText("✅ Analysis complete");
-        aiStatusLabel->setStyleSheet("font-size: 11px; color: #8cf4b8; font-style: italic; font-weight: 500;");
-
-    } catch (const std::exception& e) {
-        aiSummaryText->setPlainText("Unable to generate AI summary. Please check your API configuration and ensure you have set up your OpenRouter API key in the .env file.");
-        aiStatusLabel->setText("❌ Error: " + QString::fromStdString(e.what()));
-        aiStatusLabel->setStyleSheet("font-size: 11px; color: #ff9191; font-style: italic; font-weight: 500;");
+void DashboardWindow::onAiProgressWatchdogTimeout() {
+    if (aiWatchdogGeneration_ != aiRunGeneration_) {
+        return;
+    }
+    if (aiStreamProgressSeenForRun_) {
+        return;
+    }
+    if (aiInsightAppliedForRun_) {
+        return;
+    }
+    if (aiFallbackJobStarted_) {
+        return;
+    }
+    aiFallbackJobStarted_ = true;
+    if (aiLoadingSubLabel != nullptr) {
+        aiLoadingSubLabel->setText(
+            QStringLiteral("No live progress yet. Running a direct summary request…"));
     }
 
-    // Re-enable button and restore style
+    const int generation = aiRunGeneration_;
+    const std::string userCopy = userId_;
+    const YearMonth periodCopy = aiPendingYearMonth_;
+    finsight::core::managers::FinanceTrackerBackend *backend = &backend_;
+
+    (void)QtConcurrent::run([this, backend, userCopy, periodCopy, generation]() {
+        try {
+            const auto insight = backend->ai().generateDashboardInsight(userCopy,
+                                                                         periodCopy,
+                                                                         backend->analytics(),
+                                                                         backend->transactions(),
+                                                                         backend->budgets(),
+                                                                         backend->savings(),
+                                                                         backend->goals());
+
+            QMetaObject::invokeMethod(
+                this,
+                [this, generation, insight]() {
+                    if (generation != aiRunGeneration_) {
+                        return;
+                    }
+                    if (aiInsightAppliedForRun_) {
+                        return;
+                    }
+                    aiInsightAppliedForRun_ = true;
+                    aiProgressWatchdog_.stop();
+                    applyAiDashboardInsight(generation, insight);
+                },
+                Qt::QueuedConnection);
+        } catch (const std::exception& ex) {
+            QMetaObject::invokeMethod(
+                this,
+                [this, generation, msg = QString::fromUtf8(ex.what())]() {
+                    if (generation != aiRunGeneration_) {
+                        return;
+                    }
+                    if (aiInsightAppliedForRun_) {
+                        return;
+                    }
+                    aiInsightAppliedForRun_ = true;
+                    aiProgressWatchdog_.stop();
+                    applyAiDashboardRequestFailure(generation, msg);
+                },
+                Qt::QueuedConnection);
+        }
+    });
+}
+
+void DashboardWindow::dispatchAiStreamEvent(const QString& event, const QString& model, const QString& detail) {
+    if (!aiStreamProgressSeenForRun_) {
+        aiStreamProgressSeenForRun_ = true;
+        aiProgressWatchdog_.stop();
+    }
+
+    if (event == QStringLiteral("trying_model")) {
+        aiSummaryTitle->setText(
+            QStringLiteral("Analyzing with %1").arg(displayModelName(model.toStdString())));
+        aiStatusLabel->setText(
+            QStringLiteral("✨ Analyzing with %1").arg(displayModelName(model.toStdString())));
+        if (aiLoadingSubLabel != nullptr) {
+            aiLoadingSubLabel->clear();
+        }
+    } else if (event == QStringLiteral("model_failed")) {
+        if (aiLoadingSubLabel != nullptr) {
+            aiLoadingSubLabel->setText(
+                QStringLiteral("Failed: %1. Trying next…").arg(displayModelName(model.toStdString())));
+        }
+    } else if (event == QStringLiteral("error")) {
+        if (aiLoadingSubLabel != nullptr && !detail.isEmpty()) {
+            aiLoadingSubLabel->setText(detail);
+        }
+    }
+}
+
+void DashboardWindow::applyAiDashboardInsight(int generation, const finsight::core::models::AIDashboardInsight& insight) {
+    if (generation != aiRunGeneration_) {
+        return;
+    }
+
+    aiProgressWatchdog_.stop();
+    if (aiSparklesPulse_ != nullptr) {
+        aiSparklesPulse_->stop();
+    }
+    if (aiLoadingFrame != nullptr) {
+        aiLoadingFrame->setVisible(false);
+    }
+    aiSummaryText->setVisible(true);
+    aiSummaryTitle->setText(QStringLiteral("AI-Powered Financial Analysis"));
+
     generateAISummaryButton->setEnabled(true);
-    generateAISummaryButton->setText("Generate AI Summary");
-    generateAISummaryButton->setStyleSheet(
-        "QPushButton {"
-        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-        "                                    stop:0 #4968a8, stop:1 #3a5490);"
-        "  color: #ffffff;"
-        "  border: none;"
-        "  border-radius: 8px;"
-        "  padding: 8px 16px;"
-        "  font-weight: 600;"
-        "  font-size: 12px;"
-        "}"
-        "QPushButton:hover {"
-        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-        "                                    stop:0 #5a7bc0, stop:1 #4968a8);"
-        "}"
-        "QPushButton:pressed {"
-        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-        "                                    stop:0 #3a5490, stop:1 #2d4270);"
-        "}"
-    );
+    resetAiSummaryButtonStyle();
+    generateAISummaryButton->setText(QStringLiteral("✨ Generate Insights"));
+
+    if (insight.allModelsBusy) {
+        const QString body = QString::fromStdString(insight.summary);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+        aiSummaryText->setMarkdown(QStringLiteral("## All models busy\n\n%1").arg(body));
+#else
+        aiSummaryText->setPlainText(QStringLiteral("All models busy\n\n") + body);
+#endif
+        aiRecommendationsList->clear();
+        aiModelLabel->setVisible(false);
+        aiStatusLabel->setText(QStringLiteral("All models busy"));
+        aiStatusLabel->setStyleSheet(QStringLiteral("font-size: 11px; color: #ff9191; font-style: italic; font-weight: 500;"));
+        return;
+    }
+
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    aiSummaryText->setMarkdown(QString::fromStdString(insight.summary));
+#else
+    aiSummaryText->setPlainText(QString::fromStdString(insight.summary));
+#endif
+
+    aiRecommendationsList->clear();
+    for (const auto& recommendation : insight.recommendations) {
+        aiRecommendationsList->addItem(QStringLiteral("💡 ") + QString::fromStdString(recommendation));
+    }
+
+    if (!insight.model.empty()) {
+        aiModelLabel->setText(
+            QStringLiteral("Answered by %1").arg(displayModelName(insight.model)));
+        aiModelLabel->setVisible(true);
+    }
+
+    aiStatusLabel->setText(QStringLiteral("✅ Analysis complete"));
+    aiStatusLabel->setStyleSheet(QStringLiteral("font-size: 11px; color: #8cf4b8; font-style: italic; font-weight: 500;"));
+}
+
+void DashboardWindow::applyAiDashboardRequestFailure(int generation, const QString& message) {
+    if (generation != aiRunGeneration_) {
+        return;
+    }
+
+    if (aiSparklesPulse_ != nullptr) {
+        aiSparklesPulse_->stop();
+    }
+    if (aiLoadingFrame != nullptr) {
+        aiLoadingFrame->setVisible(false);
+    }
+    aiSummaryText->setVisible(true);
+    aiSummaryTitle->setText(QStringLiteral("AI-Powered Financial Analysis"));
+
+    generateAISummaryButton->setEnabled(true);
+    resetAiSummaryButtonStyle();
+    generateAISummaryButton->setText(QStringLiteral("✨ Generate Insights"));
+
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    aiSummaryText->setMarkdown(
+        QStringLiteral("## Request failed\n\n%1\n\nCheck your OpenRouter API key in `.env` and your network connection.")
+            .arg(message));
+#else
+    aiSummaryText->setPlainText(QStringLiteral("Request failed\n\n") + message);
+#endif
+    aiRecommendationsList->clear();
+    aiModelLabel->setVisible(false);
+    aiStatusLabel->setText(QStringLiteral("Request failed"));
+    aiStatusLabel->setStyleSheet(QStringLiteral("font-size: 11px; color: #ff9191; font-style: italic; font-weight: 500;"));
 }

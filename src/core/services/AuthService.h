@@ -21,7 +21,8 @@ public:
                               const std::string& password,
                               const models::Date& createdAt);
     // Validates credentials and returns the matching user if found.
-    std::optional<models::User> login(const std::string& email, const std::string& password) const;
+    // Upgrades legacy plaintext password_hash rows to the current hash on successful login.
+    std::optional<models::User> login(const std::string& email, const std::string& password);
     // Updates the editable profile fields for one user.
     models::User updateProfile(const std::string& userId,
                                const std::string& fullName,

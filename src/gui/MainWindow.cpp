@@ -1,6 +1,10 @@
 #include "gui/MainWindow.h"
 #include "gui/auth/LoginDialog.h"
 #include "gui/auth/RegisterDialog.h"
+#include "data/storage/BackendStore.h"
+
+#include <filesystem>
+
 #include "gui/profile/ProfileWindow.h"
 #include "gui/dashboard/DashboardWindow.h"
 #include "gui/transactions/TransactionsWindow.h"
@@ -28,12 +32,22 @@
 #endif
 
 MainWindow::MainWindow(finsight::core::managers::FinanceTrackerBackend& backend,
+                       finsight::data::storage::BackendStore *persistStore,
+                       std::filesystem::path persistDirectory,
                        QWidget *parent)
     : QMainWindow(parent),
-      backend_(backend) {
+      backend_(backend),
+      persistStore_(persistStore),
+      persistDirectory_(std::move(persistDirectory)) {
     setupUi();
     connectSignals();
     showLoginPage();  // Start with login page
+}
+
+void MainWindow::persistNow() {
+    if (persistStore_ != nullptr && !persistDirectory_.empty()) {
+        persistStore_->save(backend_, persistDirectory_);
+    }
 }
 
 void MainWindow::setupUi() {
@@ -206,9 +220,11 @@ void MainWindow::setupUi() {
     actionsLayout->addWidget(addButton);
     actionsLayout->addWidget(themeButton);
 
-    auto *profileLabel = new QLabel("Moataz");
+    auto *profileLabel = new QLabel("User");
+    profileLabel->setObjectName("profileLabel");
     profileLabel->setStyleSheet("color: #ffffff; font-weight: 700; font-size: 13px; margin-left: 18px;");
-    auto *profileBadge = new QLabel("EGP 28,721");
+    auto *profileBadge = new QLabel("EGP 0");
+    profileBadge->setObjectName("profileBadge");
     profileBadge->setStyleSheet(
         "background-color: #2a3b6e;"
         "color: #f5b642;"
@@ -280,18 +296,22 @@ void MainWindow::connectSignals() {
         stack->setCurrentWidget(profilePage);
     });
     connect(logoutButton, &QPushButton::clicked, this, [this]() {
+        persistNow();
         clearCurrentUser();
         showLoginPage();
     });
 
     connect(transactionsPage, &TransactionsWindow::dataChanged, this, [this]() {
         refreshPages();
+        persistNow();
     });
     connect(budgetsPage, &BudgetsWindow::dataChanged, this, [this]() {
         refreshPages();
+        persistNow();
     });
     connect(profilePage, &ProfileWindow::profileUpdated, this, [this]() {
         refreshPages();
+        persistNow();
     });
 }
 
@@ -310,7 +330,25 @@ void MainWindow::setCurrentUser(const std::string& userId) {
     transactionsPage->setUserId(userId_);
     budgetsPage->setUserId(userId_);
     profilePage->setUserId(userId_);
+    
+    auto* profileLabel = findChild<QLabel*>("profileLabel");
+    auto* profileBadge = findChild<QLabel*>("profileBadge");
+    if (profileLabel) {
+        try {
+            const auto& user = backend_.auth().getUser(userId);
+            profileLabel->setText(QString::fromStdString(user.fullName));
+        } catch (...) {
+            profileLabel->setText("User");
+        }
+    }
+    if (profileBadge) {
+        double balance = backend_.transactions().sumTransactions(userId, finsight::core::models::TransactionType::Income, {})
+                     - backend_.transactions().sumTransactions(userId, finsight::core::models::TransactionType::Expense, {});
+        profileBadge->setText("EGP " + QString::number(balance, 'f', 0));
+    }
+    
     refreshPages();
+    persistNow();
     stack->setCurrentWidget(dashboardPage);
 }
 

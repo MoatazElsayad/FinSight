@@ -41,9 +41,9 @@ private:
     QPushButton *deleteButton;
     QPushButton *clearButton;
 
-    QLabel *totalBudgetLabel;
-    QLabel *totalSpentLabel;
-    QLabel *totalRemainingLabel;
+    QLabel *totalBudgetValue {nullptr};
+    QLabel *totalSpentValue {nullptr};
+    QLabel *totalRemainingValue {nullptr};
 
     void setupUi();
     void populateCategories();

@@ -1,7 +1,0 @@
-{
-  "format":"finsight-sidecar-v1",
-  "receipts":["receipt-1\tusr-1\tmarket_receipt.txt\tLocal Market\\n2026-04-02\\nTOTAL 950.00\\nFood and groceries\tconfirmed\t2026-04-03"],
-  "parsedReceipts":["receipt-1\tLocal Market\t2026-04-02\t2026.000000\tcat-4\tHeuristic parsing from raw OCR text. Review before saving.\tLocal Market|2026-04-02|TOTAL 950.00|Food and groceries"],
-  "pantryItems":["pantry-1\tusr-1\tRice\tkg\t1.000000\t2.000000\t2026-04-03"],
-  "shoppingItems":["shop-1\tusr-1\tMilk\tGroceries\t2.000000\tbottles\t0\t2026-04-03"]
-}

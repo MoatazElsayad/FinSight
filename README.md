@@ -1,77 +1,39 @@
-# FinSight Backend
+# FinSight
 
-This repository now contains the core backend logic for a C++ personal finance tracker, scoped to your team role only:
+Desktop personal finance app: **Qt 6 / Qt 5 GUI** on top of a **C++20** core (SQLite + JSON sidecar persistence).
 
-- User registration, login, and profile updates
-- Built-in and custom categories
-- Transaction CRUD, bulk delete, filtering, and monthly totals
-- Monthly category budgets with budget health summaries
-- Savings deposits and withdrawals with monthly and long-term goals
-- Investment tracking with current value and profit/loss snapshots
-- Financial goals with progress updates
-- Session/token state for authenticated users
-- Receipt upload, heuristic parsing, and transaction confirmation flow
-- Shopping list and pantry state management
-- Date-range financial report generation
-- Dashboard analytics that combine transactions, budgets, savings, investments, and goals
+## Features
 
-## Project Structure
+- Registration, login, profile
+- Categories, transactions, budgets, savings, goals
+- Dashboard analytics and AI insights (OpenRouter)
+- Optional budget alert email (Resend)
 
-- `src/core/models`: Domain models and shared value types
-- `src/core/services`: Business logic for each backend feature area
-- `src/core/managers`: A single backend facade that coordinates all services
-- `src/main.cpp`: Small console demo that exercises the backend without Qt
-- `src/core/services/ReceiptService.*`: Receipt intake and parsing flow
-- `src/core/services/ShoppingService.*`: Pantry and shopping list state
-- `src/core/services/ReportService.*`: Exportable report summaries
-- `src/core/services/SessionService.*`: Simple token/session state
-- `src/data/json`: Lightweight text escaping/encoding helpers for persistence
-- `src/data/storage`: Hybrid persistence with SQLite for core finance data and JSON sidecar files for flexible app state
+## Layout
+
+- `src/core/` — models, services, `FinanceTrackerBackend`
+- `src/data/` — persistence (`BackendStore`, codecs)
+- `src/network/` — HTTP (OpenRouter chat, Resend), JSON helpers
+- `src/gui/` — Qt application entrypoint and windows
+- `assets/` — e.g. `logo.svg`
+- `runtime_data/` — local DB and sidecar (created at run time next to the executable’s parent folder when run from a normal build layout)
 
 ## Build
+
+Requires **CMake 3.20+**, **SQLite3**, **Boost.System**, and **Qt Widgets + Concurrent + Network**.
 
 ```bash
 cmake -S . -B build
 cmake --build build
 ```
 
-## Environment File
+The main target is **`finsight_gui`**.
 
-You can keep your AI provider settings in a local `.env` file at the project root instead of pasting them into source files.
+## Configuration
 
-Supported keys:
+Copy `.env.example` to `.env` at the project root (or rely on walking upward from the working directory or the executable directory — see `EnvLoader::loadFromNearestFile` in `main_gui.cpp`).
 
-- `FINSIGHT_OPENROUTER_API_URL`
-- `FINSIGHT_OPENROUTER_API_KEY`
-- `FINSIGHT_OPENROUTER_MODEL`
-- `FINSIGHT_EMAIL_ENABLED`
-- `FINSIGHT_RESEND_API_URL`
-- `FINSIGHT_RESEND_API_KEY`
-- `FINSIGHT_RESEND_FROM_EMAIL`
-- `FINSIGHT_RESEND_FROM_NAME`
+Supported variables match `src/gui/main_gui.cpp`:
 
-Copy `.env.example` to `.env` and fill in your real values. Both `src/main.cpp` and `src/main_test.cpp` load the nearest `.env` file automatically.
-
-## Budget Alert Emails
-
-The backend can now send a budget alert email to the registered user when a newly added expense transaction pushes one category budget over its monthly limit.
-
-The current implementation uses the Resend email API through `curl`, configured from `.env`.
-
-## Current Scope
-
-This backend is intentionally:
-
-- In-memory for live runtime, with persistence support in `src/data`
-- Independent from Qt
-- Independent from networking
-- Independent from automated tests
-
-## Persistence Design
-
-The backend now uses a hybrid storage design:
-
-- `SQLite` for structured finance data such as users, transactions, categories, budgets, savings, investments, goals, and sessions
-- `JSON` sidecar storage for flexible state such as receipts, parsed receipt results, pantry items, and shopping list items
-
-That makes it a clean base for your teammates to connect to later using the GUI and transport layers they own.
+- `OPENROUTER_API_KEY`, `OPENROUTER_API_URL`
+- `EMAIL_ENABLED`, `EMAIL_API_URL`, `EMAIL_API_KEY`, `EMAIL_FROM_EMAIL`, `EMAIL_FROM_NAME`

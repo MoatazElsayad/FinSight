@@ -2,10 +2,12 @@
 #define DASHBOARDWINDOW_H
 
 #include "core/managers/FinanceTrackerBackend.h"
+#include "core/models/Common.h"
 
 #include <QWidget>
 
 #include <QTextEdit>
+#include <QTimer>
 
 class QLabel;
 class QTableWidget;
@@ -13,6 +15,9 @@ class QListWidget;
 class QComboBox;
 class QPushButton;
 class QButtonGroup;
+class QFrame;
+class QGraphicsOpacityEffect;
+class QPropertyAnimation;
 
 class DashboardWindow : public QWidget {
     Q_OBJECT
@@ -49,8 +54,6 @@ private:
     QComboBox *monthSelector;
 
     QTableWidget *recentTransactionsTable;
-    QListWidget *topCategoriesList;
-    QLabel *budgetHealthLabel;
 
     // AI Summary components
     QPushButton *generateAISummaryButton;
@@ -58,6 +61,21 @@ private:
     QTextEdit *aiSummaryText;
     QListWidget *aiRecommendationsList;
     QLabel *aiStatusLabel;
+    QLabel *aiModelLabel;
+
+    QFrame *aiLoadingFrame {nullptr};
+    QLabel *aiSparklesLabel {nullptr};
+    QLabel *aiLoadingSubLabel {nullptr};
+    QTimer aiProgressWatchdog_;
+    QGraphicsOpacityEffect *aiSparklesOpacity_ {nullptr};
+    QPropertyAnimation *aiSparklesPulse_ {nullptr};
+
+    int aiRunGeneration_ {0};
+    int aiWatchdogGeneration_ {0};
+    bool aiStreamProgressSeenForRun_ {false};
+    bool aiInsightAppliedForRun_ {false};
+    bool aiFallbackJobStarted_ {false};
+    finsight::core::models::YearMonth aiPendingYearMonth_ {};
 
     void setupUi();
     QWidget *createSummaryCard(const QString &title, QLabel *&valueLabel, const QString& accentColor);
@@ -66,6 +84,13 @@ private:
     bool isTransactionInScope(const finsight::core::models::Transaction& transaction,
                               const finsight::core::models::YearMonth& period) const;
     void generateAISummary();
+    void onAiProgressWatchdogTimeout();
+    void beginAiSummaryGeneration(const finsight::core::models::YearMonth& period);
+    void dispatchAiStreamEvent(const QString& event, const QString& model, const QString& detail);
+    void applyAiDashboardInsight(int generation, const finsight::core::models::AIDashboardInsight& insight);
+    void applyAiDashboardRequestFailure(int generation, const QString& message);
+    void resetAiSummaryButtonStyle();
+    void cancelPendingAiSummaryUi();
 };
 
 #endif

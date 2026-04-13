@@ -2,6 +2,7 @@
 
 #include <QComboBox>
 #include <QFormLayout>
+#include <QFrame>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -42,30 +43,102 @@ void ProfileWindow::refreshData() {
 
 void ProfileWindow::setupUi() {
     auto *mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(24, 24, 24, 24);
+    mainLayout->setSpacing(20);
 
-    auto *titleLabel = new QLabel("Profile");
-    titleLabel->setStyleSheet("font-size: 20px; font-weight: bold;");
-    mainLayout->addWidget(titleLabel);
+    setStyleSheet(
+        "ProfileWindow, ProfileWindow > QWidget {"
+        "  background-color: #0b1020;"
+        "  color: #e5e9f4;"
+        "}"
+        "QFrame#finCard {"
+        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1a2135, stop:1 #141a27);"
+        "  border: 1px solid #2b3245;"
+        "  border-radius: 14px;"
+        "}"
+        "QLineEdit, QComboBox {"
+        "  background-color: #0f1527;"
+        "  border: 1px solid #2b3245;"
+        "  border-radius: 10px;"
+        "  color: #e5e9f4;"
+        "  padding: 10px 12px;"
+        "  min-height: 22px;"
+        "}"
+        "QLabel#profileReadOnly {"
+        "  background-color: #0f1527;"
+        "  border: 1px solid #2b3245;"
+        "  border-radius: 10px;"
+        "  color: #c8d0e4;"
+        "  padding: 10px 12px;"
+        "}"
+    );
+
+    auto *headerColumn = new QVBoxLayout();
+    auto *titleLabel = new QLabel(QStringLiteral("Profile"));
+    titleLabel->setStyleSheet(
+        "font-size: 32px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px;");
+    auto *subtitleLabel = new QLabel(
+        QStringLiteral("Keep your contact details current. Email and signup date are read-only."));
+    subtitleLabel->setStyleSheet("font-size: 13px; color: #8d97ac;");
+    subtitleLabel->setWordWrap(true);
+    headerColumn->addWidget(titleLabel);
+    headerColumn->addWidget(subtitleLabel);
+    mainLayout->addLayout(headerColumn);
+
+    auto *card = new QFrame();
+    card->setObjectName("finCard");
+    auto *cardLay = new QVBoxLayout(card);
+    cardLay->setContentsMargins(24, 22, 24, 24);
+    auto *cardTitle = new QLabel(QStringLiteral("Account details"));
+    cardTitle->setStyleSheet("font-size: 15px; font-weight: 600; color: #e5e9f4;");
+    cardLay->addWidget(cardTitle);
+    cardLay->addSpacing(16);
 
     auto *formLayout = new QFormLayout();
+    formLayout->setHorizontalSpacing(20);
+    formLayout->setVerticalSpacing(14);
+    formLayout->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+
+    auto labelStyle = [](const QString& text) {
+        auto *l = new QLabel(text);
+        l->setStyleSheet(QStringLiteral("color: #9ca6bf; font-size: 12px; font-weight: 500;"));
+        return l;
+    };
+
     fullNameEdit = new QLineEdit();
     phoneEdit = new QLineEdit();
     genderCombo = new QComboBox();
-    genderCombo->addItems({"Prefer not to say", "Male", "Female"});
+    genderCombo->addItems(
+        {QStringLiteral("Prefer not to say"), QStringLiteral("Male"), QStringLiteral("Female")});
     emailValueLabel = new QLabel();
+    emailValueLabel->setObjectName(QStringLiteral("profileReadOnly"));
+    emailValueLabel->setMinimumHeight(36);
     createdAtValueLabel = new QLabel();
+    createdAtValueLabel->setObjectName(QStringLiteral("profileReadOnly"));
+    createdAtValueLabel->setMinimumHeight(36);
 
-    formLayout->addRow("Full name:", fullNameEdit);
-    formLayout->addRow("Phone:", phoneEdit);
-    formLayout->addRow("Gender:", genderCombo);
-    formLayout->addRow("Email:", emailValueLabel);
-    formLayout->addRow("Created at:", createdAtValueLabel);
-    mainLayout->addLayout(formLayout);
+    formLayout->addRow(labelStyle(QStringLiteral("Full name")), fullNameEdit);
+    formLayout->addRow(labelStyle(QStringLiteral("Phone")), phoneEdit);
+    formLayout->addRow(labelStyle(QStringLiteral("Gender")), genderCombo);
+    formLayout->addRow(labelStyle(QStringLiteral("Email")), emailValueLabel);
+    formLayout->addRow(labelStyle(QStringLiteral("Member since")), createdAtValueLabel);
+    cardLay->addLayout(formLayout);
+    cardLay->addSpacing(20);
 
-    saveButton = new QPushButton("Save Profile");
-    connect(saveButton, &QPushButton::clicked, this, &ProfileWindow::onSaveProfile);
-    mainLayout->addWidget(saveButton);
+    saveButton = new QPushButton(QStringLiteral("Save changes"));
+    saveButton->setStyleSheet(
+        "QPushButton {"
+        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5b8cff, stop:1 #4a7ae6);"
+        "  color: #ffffff; border: none; border-radius: 10px;"
+        "  padding: 12px 28px; font-weight: 600; font-size: 14px;"
+        "}"
+        "QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #6b9cff, stop:1 #5a8af6); }");
+    cardLay->addWidget(saveButton, 0, Qt::AlignLeft);
+
+    mainLayout->addWidget(card);
     mainLayout->addStretch();
+
+    connect(saveButton, &QPushButton::clicked, this, &ProfileWindow::onSaveProfile);
 }
 
 void ProfileWindow::onSaveProfile() {

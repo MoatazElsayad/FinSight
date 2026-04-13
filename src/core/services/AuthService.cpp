@@ -41,13 +41,19 @@ models::User AuthService::registerUser(const std::string& fullName,
 }
 
 // Tries to authenticate a user by email and password.
-std::optional<models::User> AuthService::login(const std::string& email,
-                                               const std::string& password) const {
+std::optional<models::User> AuthService::login(const std::string& email, const std::string& password) {
     const auto hashedPassword = hashPassword(password);
     const auto legacyPassword = legacyHashPassword(password);
-    for (const auto& user : users_) {
-        if (models::toLower(user.email) == models::toLower(email) &&
-            (user.passwordHash == hashedPassword || user.passwordHash == legacyPassword)) {
+    for (auto& user : users_) {
+        if (models::toLower(user.email) != models::toLower(email)) {
+            continue;
+        }
+        if (user.passwordHash == hashedPassword || user.passwordHash == legacyPassword) {
+            return user;
+        }
+        // Seeded or legacy databases sometimes store the raw password in password_hash.
+        if (user.passwordHash == password) {
+            user.passwordHash = hashedPassword;
             return user;
         }
     }

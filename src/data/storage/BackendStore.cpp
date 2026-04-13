@@ -80,6 +80,18 @@ void reset(sqlite3_stmt* statement) {
     sqlite3_clear_bindings(statement);
 }
 
+// Copies UTF-8 text from a SQLite column, or an empty string if NULL.
+string columnText(sqlite3_stmt* statement, int index) {
+    if (sqlite3_column_type(statement, index) == SQLITE_NULL) {
+        return {};
+    }
+    const unsigned char* text = sqlite3_column_text(statement, index);
+    if (text == nullptr) {
+        return {};
+    }
+    return string(reinterpret_cast<const char*>(text));
+}
+
 // Steps a prepared statement and throws on failure.
 void stepDone(sqlite3* db, sqlite3_stmt* statement) {
     if (sqlite3_step(statement) != SQLITE_DONE) {
@@ -728,14 +740,17 @@ void BackendStore::load(core::managers::FinanceTrackerBackend& backend,
             db,
             "SELECT id, full_name, email, phone, gender, password_hash, created_at FROM users;");
         while (sqlite3_step(statement) == SQLITE_ROW) {
+            const string createdAtText = columnText(statement, 6);
             users.push_back(core::models::User {
-                .id = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
-                .fullName = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
-                .email = reinterpret_cast<const char*>(sqlite3_column_text(statement, 2)),
-                .phone = reinterpret_cast<const char*>(sqlite3_column_text(statement, 3)),
-                .gender = reinterpret_cast<const char*>(sqlite3_column_text(statement, 4)),
-                .passwordHash = reinterpret_cast<const char*>(sqlite3_column_text(statement, 5)),
-                .createdAt = core::models::Date::fromString(reinterpret_cast<const char*>(sqlite3_column_text(statement, 6))),
+                .id = columnText(statement, 0),
+                .fullName = columnText(statement, 1),
+                .email = columnText(statement, 2),
+                .phone = columnText(statement, 3),
+                .gender = columnText(statement, 4),
+                .passwordHash = columnText(statement, 5),
+                .createdAt = createdAtText.empty()
+                                 ? core::models::Date {1970, 1, 1}
+                                 : core::models::Date::fromString(createdAtText),
             });
         }
         finalize(statement);
@@ -745,11 +760,11 @@ void BackendStore::load(core::managers::FinanceTrackerBackend& backend,
         statement = prepare(db, "SELECT id, user_id, name, icon, kind, built_in, archived FROM categories;");
         while (sqlite3_step(statement) == SQLITE_ROW) {
             categories.push_back(core::models::Category {
-                .id = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
-                .userId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
-                .name = reinterpret_cast<const char*>(sqlite3_column_text(statement, 2)),
-                .icon = reinterpret_cast<const char*>(sqlite3_column_text(statement, 3)),
-                .kind = toCategoryKind(reinterpret_cast<const char*>(sqlite3_column_text(statement, 4))),
+                .id = columnText(statement, 0),
+                .userId = columnText(statement, 1),
+                .name = columnText(statement, 2),
+                .icon = columnText(statement, 3),
+                .kind = toCategoryKind(columnText(statement, 4)),
                 .builtIn = sqlite3_column_int(statement, 5) != 0,
                 .archived = sqlite3_column_int(statement, 6) != 0,
             });
@@ -759,31 +774,34 @@ void BackendStore::load(core::managers::FinanceTrackerBackend& backend,
         vector<core::models::Transaction> transactions;
         statement = prepare(db, "SELECT id, user_id, title, description, category_id, type, amount, date, merchant, tags FROM transactions;");
         while (sqlite3_step(statement) == SQLITE_ROW) {
+            const string dateText = columnText(statement, 7);
             transactions.push_back(core::models::Transaction {
-                .id = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
-                .userId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
-                .title = reinterpret_cast<const char*>(sqlite3_column_text(statement, 2)),
-                .description = reinterpret_cast<const char*>(sqlite3_column_text(statement, 3)),
-                .categoryId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 4)),
-                .type = toTransactionType(reinterpret_cast<const char*>(sqlite3_column_text(statement, 5))),
+                .id = columnText(statement, 0),
+                .userId = columnText(statement, 1),
+                .title = columnText(statement, 2),
+                .description = columnText(statement, 3),
+                .categoryId = columnText(statement, 4),
+                .type = toTransactionType(columnText(statement, 5)),
                 .amount = sqlite3_column_double(statement, 6),
-                .date = core::models::Date::fromString(reinterpret_cast<const char*>(sqlite3_column_text(statement, 7))),
-                .merchant = reinterpret_cast<const char*>(sqlite3_column_text(statement, 8)),
-                .tags = json::decodeList(reinterpret_cast<const char*>(sqlite3_column_text(statement, 9))),
+                .date = dateText.empty() ? core::models::Date {1970, 1, 1}
+                                         : core::models::Date::fromString(dateText),
+                .merchant = columnText(statement, 8),
+                .tags = json::decodeList(columnText(statement, 9)),
             });
         }
         finalize(statement);
-        if (!categories.empty() || !transactions.empty()) {
-            backend.transactions().loadState(move(categories), move(transactions));
+        if (categories.empty()) {
+            categories = backend.transactions().getCategories();
         }
+        backend.transactions().loadState(move(categories), move(transactions));
 
         vector<core::models::Budget> budgets;
         statement = prepare(db, "SELECT id, user_id, category_id, year, month, limit_amount FROM budgets;");
         while (sqlite3_step(statement) == SQLITE_ROW) {
             budgets.push_back(core::models::Budget {
-                .id = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
-                .userId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
-                .categoryId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 2)),
+                .id = columnText(statement, 0),
+                .userId = columnText(statement, 1),
+                .categoryId = columnText(statement, 2),
                 .period = core::models::YearMonth {sqlite3_column_int(statement, 3), sqlite3_column_int(statement, 4)},
                 .limit = sqlite3_column_double(statement, 5),
             });
@@ -794,13 +812,15 @@ void BackendStore::load(core::managers::FinanceTrackerBackend& backend,
         vector<core::models::SavingsEntry> savingsEntries;
         statement = prepare(db, "SELECT id, user_id, type, amount, date, note FROM savings_entries;");
         while (sqlite3_step(statement) == SQLITE_ROW) {
+            const string entryDate = columnText(statement, 4);
             savingsEntries.push_back(core::models::SavingsEntry {
-                .id = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
-                .userId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
-                .type = toSavingsEntryType(reinterpret_cast<const char*>(sqlite3_column_text(statement, 2))),
+                .id = columnText(statement, 0),
+                .userId = columnText(statement, 1),
+                .type = toSavingsEntryType(columnText(statement, 2)),
                 .amount = sqlite3_column_double(statement, 3),
-                .date = core::models::Date::fromString(reinterpret_cast<const char*>(sqlite3_column_text(statement, 4))),
-                .note = reinterpret_cast<const char*>(sqlite3_column_text(statement, 5)),
+                .date = entryDate.empty() ? core::models::Date {1970, 1, 1}
+                                          : core::models::Date::fromString(entryDate),
+                .note = columnText(statement, 5),
             });
         }
         finalize(statement);
@@ -808,12 +828,14 @@ void BackendStore::load(core::managers::FinanceTrackerBackend& backend,
         vector<core::models::SavingsGoal> savingsGoals;
         statement = prepare(db, "SELECT id, user_id, monthly_target, long_term_target, target_date FROM savings_goals;");
         while (sqlite3_step(statement) == SQLITE_ROW) {
+            const string goalDate = columnText(statement, 4);
             savingsGoals.push_back(core::models::SavingsGoal {
-                .id = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
-                .userId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
+                .id = columnText(statement, 0),
+                .userId = columnText(statement, 1),
                 .monthlyTarget = sqlite3_column_double(statement, 2),
                 .longTermTarget = sqlite3_column_double(statement, 3),
-                .targetDate = core::models::Date::fromString(reinterpret_cast<const char*>(sqlite3_column_text(statement, 4))),
+                .targetDate = goalDate.empty() ? core::models::Date {1970, 1, 1}
+                                               : core::models::Date::fromString(goalDate),
             });
         }
         finalize(statement);
@@ -821,16 +843,18 @@ void BackendStore::load(core::managers::FinanceTrackerBackend& backend,
         vector<core::models::Investment> investments;
         statement = prepare(db, "SELECT id, user_id, asset_name, symbol, type, quantity, buy_rate, current_rate, purchase_date FROM investments;");
         while (sqlite3_step(statement) == SQLITE_ROW) {
+            const string purchaseDate = columnText(statement, 8);
             investments.push_back(core::models::Investment {
-                .id = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
-                .userId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
-                .assetName = reinterpret_cast<const char*>(sqlite3_column_text(statement, 2)),
-                .symbol = reinterpret_cast<const char*>(sqlite3_column_text(statement, 3)),
-                .type = toInvestmentType(reinterpret_cast<const char*>(sqlite3_column_text(statement, 4))),
+                .id = columnText(statement, 0),
+                .userId = columnText(statement, 1),
+                .assetName = columnText(statement, 2),
+                .symbol = columnText(statement, 3),
+                .type = toInvestmentType(columnText(statement, 4)),
                 .quantity = sqlite3_column_double(statement, 5),
                 .buyRate = sqlite3_column_double(statement, 6),
                 .currentRate = sqlite3_column_double(statement, 7),
-                .purchaseDate = core::models::Date::fromString(reinterpret_cast<const char*>(sqlite3_column_text(statement, 8))),
+                .purchaseDate = purchaseDate.empty() ? core::models::Date {1970, 1, 1}
+                                                     : core::models::Date::fromString(purchaseDate),
             });
         }
         finalize(statement);
@@ -839,14 +863,16 @@ void BackendStore::load(core::managers::FinanceTrackerBackend& backend,
         vector<core::models::Goal> goals;
         statement = prepare(db, "SELECT id, user_id, title, description, target_amount, current_amount, target_date, completed FROM goals;");
         while (sqlite3_step(statement) == SQLITE_ROW) {
+            const string targetDateText = columnText(statement, 6);
             goals.push_back(core::models::Goal {
-                .id = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
-                .userId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
-                .title = reinterpret_cast<const char*>(sqlite3_column_text(statement, 2)),
-                .description = reinterpret_cast<const char*>(sqlite3_column_text(statement, 3)),
+                .id = columnText(statement, 0),
+                .userId = columnText(statement, 1),
+                .title = columnText(statement, 2),
+                .description = columnText(statement, 3),
                 .targetAmount = sqlite3_column_double(statement, 4),
                 .currentAmount = sqlite3_column_double(statement, 5),
-                .targetDate = core::models::Date::fromString(reinterpret_cast<const char*>(sqlite3_column_text(statement, 6))),
+                .targetDate = targetDateText.empty() ? core::models::Date {1970, 1, 1}
+                                                     : core::models::Date::fromString(targetDateText),
                 .completed = sqlite3_column_int(statement, 7) != 0,
             });
         }
@@ -856,10 +882,12 @@ void BackendStore::load(core::managers::FinanceTrackerBackend& backend,
         vector<core::models::Session> sessions;
         statement = prepare(db, "SELECT token, user_id, issued_on, active FROM sessions;");
         while (sqlite3_step(statement) == SQLITE_ROW) {
+            const string issued = columnText(statement, 2);
             sessions.push_back(core::models::Session {
-                .token = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)),
-                .userId = reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)),
-                .issuedOn = core::models::Date::fromString(reinterpret_cast<const char*>(sqlite3_column_text(statement, 2))),
+                .token = columnText(statement, 0),
+                .userId = columnText(statement, 1),
+                .issuedOn = issued.empty() ? core::models::Date {1970, 1, 1}
+                                           : core::models::Date::fromString(issued),
                 .active = sqlite3_column_int(statement, 3) != 0,
             });
         }

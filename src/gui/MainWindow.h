@@ -4,8 +4,13 @@
 #include "core/managers/FinanceTrackerBackend.h"
 
 #include <QMainWindow>
+#include <filesystem>
 #include <optional>
 #include <string>
+
+namespace finsight::data::storage {
+class BackendStore;
+}
 
 class QStackedWidget;
 class QPushButton;
@@ -24,10 +29,14 @@ class MainWindow : public QMainWindow {
 
 public:
     explicit MainWindow(finsight::core::managers::FinanceTrackerBackend& backend,
+                        finsight::data::storage::BackendStore* persistStore,
+                        std::filesystem::path persistDirectory,
                         QWidget *parent = nullptr);
 
 private:
     finsight::core::managers::FinanceTrackerBackend& backend_;
+    finsight::data::storage::BackendStore *persistStore_ {nullptr};
+    std::filesystem::path persistDirectory_;
     std::string userId_;
     std::optional<std::string> activeSessionToken_;
 
@@ -56,6 +65,7 @@ private:
     void clearCurrentUser();
     void showMainInterface(const QString& userId);
     void showLoginPage();
+    void persistNow();
     static finsight::core::models::Date today();
 };
 

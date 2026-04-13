@@ -2,6 +2,8 @@
 
 #include "../models/AI.h"
 
+#include <functional>
+
 using namespace std;
 
 namespace finsight::core::services {
@@ -24,13 +26,18 @@ public:
     const models::AIProviderConfig& config() const;
 
     // Generates a dashboard summary and recommendations from finance data.
+    // Optional onProgress mirrors SSE-style events: trying_model, model_failed, error (detail carries reason/message).
     models::AIDashboardInsight generateDashboardInsight(const string& userId,
                                                         const models::YearMonth& period,
                                                         const AnalyticsService& analyticsService,
                                                         const TransactionService& transactionService,
                                                         const BudgetService& budgetService,
                                                         const SavingsService& savingsService,
-                                                        const GoalService& goalService) const;
+                                                        const GoalService& goalService,
+                                                        const function<void(const string& event,
+                                                                            const string& model,
+                                                                            const string& detail)>& onProgress =
+                                                            {}) const;
     // Generates AI feedback focused on savings progress.
     models::AISavingsInsight analyzeSavings(const string& userId,
                                             const models::YearMonth& period,
@@ -50,7 +57,10 @@ public:
 
 private:
     // Tries the configured model list until one returns a usable response.
-    models::AIChatResponse runChatCompletion(const vector<models::AIMessage>& messages) const;
+    models::AIChatResponse runChatCompletion(const vector<models::AIMessage>& messages,
+                                            const function<void(const string& event,
+                                                                const string& model,
+                                                                const string& detail)>& onProgress = {}) const;
     // Builds the ordered list of models to try for a request.
     static vector<string> configuredModels(const models::AIProviderConfig& config);
     // Breaks an AI response into short bullet-like lines.

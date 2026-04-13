@@ -13,9 +13,20 @@ namespace finsight::core::models {
 // Stores the provider settings used by the AI client.
 struct AIProviderConfig {
     string apiUrl {"https://openrouter.ai/api/v1/chat/completions"};
-    string apiKey {"PASTE_REAL_API_KEY_HERE"};
-    string model {"openrouter/free"};
-    vector<string> fallbackModels;
+    string apiKey;
+    string model {"mistralai/mistral-small-3.1-24b-instruct:free"};
+    vector<string> fallbackModels {
+        "mistralai/mistral-small-3.1-24b-instruct:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "deepseek/deepseek-r1-0528:free",
+        "qwen/qwen3-coder:free",
+        "google/gemma-3-27b-it:free",
+        "mistralai/mistral-7b-instruct:free",
+        "qwen/qwen-2.5-vl-7b-instruct:free",
+        "liquid/lfm-2.5-1.2b-instruct:free",
+        "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+        "meta-llama/llama-3.2-3b-instruct:free"
+    };
     string appName {"FinSight"};
     string appUrl {"https://example.com/finsight"};
 };
@@ -42,6 +53,7 @@ struct AIChatResponse {
     string error;
     bool usedFallback {false};
     vector<string> attemptedModels;
+    int httpStatus {0};
 };
 
 // Holds AI-generated dashboard commentary.
@@ -49,6 +61,8 @@ struct AIDashboardInsight {
     string summary;
     vector<string> recommendations;
     bool usedFallback {false};
+    string model;
+    bool allModelsBusy {false};
 };
 
 // Holds AI-generated savings advice.

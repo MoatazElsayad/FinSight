@@ -17,6 +17,7 @@ public:
     QString phone() const;
     QString gender() const;
     QString password() const;
+    QString confirmPassword() const;
 
 protected:
     void accept() override;
@@ -27,6 +28,7 @@ private:
     QLineEdit *phoneEdit;
     QComboBox *genderCombo;
     QLineEdit *passwordEdit;
+    QLineEdit *passwordConfirmEdit;
 
     void setupUi();
 };

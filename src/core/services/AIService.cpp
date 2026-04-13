@@ -9,8 +9,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <random>
 #include <sstream>
+#include <thread>
 
 using namespace std;
 
@@ -36,7 +38,10 @@ models::AIDashboardInsight AIService::generateDashboardInsight(const string& use
                                                                const TransactionService& transactionService,
                                                                const BudgetService& budgetService,
                                                                const SavingsService& savingsService,
-                                                               const GoalService& goalService) const {
+                                                               const GoalService& goalService,
+                                                               const function<void(const string& event,
+                                                                                   const string& model,
+                                                                                   const string& detail)>& onProgress) const {
     const auto context = buildDashboardContext(userId,
                                                period,
                                                analyticsService,
@@ -47,12 +52,20 @@ models::AIDashboardInsight AIService::generateDashboardInsight(const string& use
     const auto response = runChatCompletion({
         {"system", "You are a personal finance assistant. Respond briefly and focus on concrete actions."},
         {"user", "Summarize this finance dashboard and give 3 practical recommendations.\n\n" + context},
-    });
+    },
+                                            onProgress);
 
     models::AIDashboardInsight insight;
     insight.summary = response.content;
     insight.recommendations = splitBulletLines(response.content);
     insight.usedFallback = response.usedFallback;
+    insight.model = response.model;
+    insight.allModelsBusy = !response.success;
+    if (!response.success && onProgress) {
+        onProgress("error",
+                   "",
+                   "All AI models are busy or rate-limited right now. Please try again in a few minutes.");
+    }
     return insight;
 }
 
@@ -64,7 +77,8 @@ models::AISavingsInsight AIService::analyzeSavings(const string& userId,
     const auto response = runChatCompletion({
         {"system", "You are a savings coach. Respond with short, direct, encouraging advice."},
         {"user", "Analyze the user's savings situation and suggest 3 actions.\n\n" + context},
-    });
+    },
+                                            {});
 
     models::AISavingsInsight insight;
     insight.summary = response.content;
@@ -92,7 +106,8 @@ models::AIFinanceChatAnswer AIService::answerFinanceQuestion(const string& userI
     const auto response = runChatCompletion({
         {"system", "You are a finance assistant for a personal finance tracker. Answer based only on the supplied data."},
         {"user", "Finance data:\n" + context + "\n\nQuestion: " + question},
-    });
+    },
+                                            {});
 
     return models::AIFinanceChatAnswer {
         .answer = response.content,
@@ -108,7 +123,8 @@ models::AIReceiptSuggestion AIService::suggestReceiptTransaction(const string& r
         {"user", "Infer merchant, amount, likely category, and confidence notes from this receipt text:\n" +
                      rawText +
                      "\nMerchant hint: " + merchantHint},
-    });
+    },
+                                            {});
 
     models::AIReceiptSuggestion suggestion;
     suggestion.parseResult.receiptId = "";
@@ -120,19 +136,23 @@ models::AIReceiptSuggestion AIService::suggestReceiptTransaction(const string& r
 }
 
 // Tries the configured model list until one returns a valid answer.
-models::AIChatResponse AIService::runChatCompletion(const vector<models::AIMessage>& messages) const {
+models::AIChatResponse AIService::runChatCompletion(
+    const vector<models::AIMessage>& messages,
+    const function<void(const string& event, const string& model, const string& detail)>& onProgress) const {
     network::ai::ChatCompletionClient client;
     models::AIChatResponse lastResponse;
     auto models = configuredModels(config_);
-    
-    // Shuffle the models for random fallback order (skip primary model)
+
     if (models.size() > 1) {
         random_device rd;
         mt19937 g(rd());
-        shuffle(models.begin() + 1, models.end(), g);
+        shuffle(models.begin(), models.end(), g);
     }
 
     for (size_t index = 0; index < models.size(); ++index) {
+        if (onProgress) {
+            onProgress("trying_model", models[index], {});
+        }
         auto response = client.complete(config_, models::AIChatRequest {
                                                      .model = models[index],
                                                      .messages = messages,
@@ -143,15 +163,27 @@ models::AIChatResponse AIService::runChatCompletion(const vector<models::AIMessa
         if (response.success) {
             return response;
         }
+        string reason = response.error;
+        if (reason.empty()) {
+            reason = response.content.empty() ? "Empty response" : response.content;
+        }
+        if (onProgress) {
+            onProgress("model_failed", models[index], reason);
+        }
+        if (response.httpStatus == 429) {
+            this_thread::sleep_for(chrono::milliseconds(500));
+        }
         lastResponse = move(response);
     }
 
     if (lastResponse.content.empty()) {
-        lastResponse.content = "All configured AI models failed to return a usable response.";
-        lastResponse.error = "No configured model returned a successful chat completion.";
+        lastResponse.content =
+            "All AI models are busy or rate-limited right now. Please try again in a few minutes.";
+        lastResponse.error = "No configured model returned a successful response.";
     }
     lastResponse.attemptedModels = models;
     lastResponse.usedFallback = true;
+    lastResponse.success = false;
     return lastResponse;
 }
 
