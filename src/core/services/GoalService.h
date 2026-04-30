@@ -14,6 +14,10 @@ class GoalService {
 public:
     // Creates a new financial goal.
     models::Goal createGoal(models::Goal goal);
+    // Updates the editable goal fields.
+    models::Goal updateGoal(const std::string& userId,
+                            const std::string& goalId,
+                            const models::Goal& updatedGoal);
     // Updates the saved progress for a goal.
     models::Goal updateProgress(const std::string& userId,
                                 const std::string& goalId,
@@ -22,6 +26,12 @@ public:
     void deleteGoal(const std::string& userId, const std::string& goalId);
     // Returns all goals for one user.
     std::vector<models::Goal> listGoals(const std::string& userId) const;
+    // Returns all incomplete goals for one user.
+    std::vector<models::Goal> listActiveGoals(const std::string& userId) const;
+    // Returns all completed goals for one user.
+    std::vector<models::Goal> listCompletedGoals(const std::string& userId) const;
+    // Calculates completion ratio for progress bars.
+    static double progressRatio(const models::Goal& goal);
     // Returns every stored goal.
     std::vector<models::Goal> allGoals() const;
     // Replaces the stored goals from persisted data.

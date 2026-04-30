@@ -19,6 +19,8 @@ public:
     void endSession(const std::string& token);
     // Returns one session by token if it exists.
     std::optional<models::Session> getSession(const std::string& token) const;
+    // Returns true only when the token exists and is active.
+    bool isSessionActive(const std::string& token) const;
     // Returns all sessions created by a user.
     std::vector<models::Session> sessionsForUser(const std::string& userId) const;
     // Returns every stored session.

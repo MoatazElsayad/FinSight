@@ -4,6 +4,7 @@
 #include "../models/Savings.h"
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,16 @@ class SavingsService {
 public:
     // Adds a savings deposit or withdrawal entry.
     models::SavingsEntry addEntry(models::SavingsEntry entry);
+    // Convenience helper for recording money added to savings.
+    models::SavingsEntry addDeposit(const std::string& userId,
+                                    double amount,
+                                    const models::Date& date,
+                                    const std::string& note = {});
+    // Convenience helper for recording money removed from savings.
+    models::SavingsEntry addWithdrawal(const std::string& userId,
+                                       double amount,
+                                       const models::Date& date,
+                                       const std::string& note = {});
     // Deletes one savings entry.
     void deleteEntry(const std::string& userId, const std::string& entryId);
     // Returns all savings entries for one user.
@@ -25,6 +36,8 @@ public:
                                 double monthlyTarget,
                                 double longTermTarget,
                                 const models::Date& targetDate);
+    // Returns the user's savings target if configured.
+    std::optional<models::SavingsGoal> getGoal(const std::string& userId) const;
     // Builds a savings summary for a given month.
     models::SavingsOverview summarize(const std::string& userId,
                                       const models::YearMonth& period) const;
@@ -35,6 +48,10 @@ public:
     models::Investment updateInvestmentRate(const std::string& userId,
                                             const std::string& investmentId,
                                             double currentRate);
+    // Updates the editable fields for one investment.
+    models::Investment updateInvestment(const std::string& userId,
+                                        const std::string& investmentId,
+                                        const models::Investment& updatedInvestment);
     // Deletes one investment.
     void deleteInvestment(const std::string& userId, const std::string& investmentId);
     // Returns all investments for one user.

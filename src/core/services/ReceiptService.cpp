@@ -3,6 +3,7 @@
 #include "TransactionService.h"
 
 #include <algorithm>
+#include <cctype>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
@@ -11,6 +12,42 @@ using namespace std;
 
 namespace finsight::core::services {
 
+namespace {
+
+std::string trim(std::string value) {
+    value.erase(value.begin(), std::find_if(value.begin(), value.end(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }));
+    value.erase(std::find_if(value.rbegin(), value.rend(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }).base(), value.end());
+    return value;
+}
+
+std::optional<double> amountFromLine(const std::string& line) {
+    const std::regex amountPattern(R"(([0-9]+(?:[.,][0-9]{1,2})?))");
+    const std::regex datePattern(R"(\d{4}-\d{2}-\d{2})");
+    const bool lineContainsDate = std::regex_search(line, datePattern);
+    std::optional<double> lastAmount;
+
+    for (std::sregex_iterator it(line.begin(), line.end(), amountPattern), end; it != end; ++it) {
+        std::string token = (*it)[1].str();
+        std::replace(token.begin(), token.end(), ',', '.');
+        try {
+            const double value = std::stod(token);
+            const bool looksLikeDateYear = lineContainsDate && value >= 1900.0 && value <= 2100.0;
+            if (value > 0.0 && !looksLikeDateYear) {
+                lastAmount = value;
+            }
+        } catch (...) {
+        }
+    }
+
+    return lastAmount;
+}
+
+}  // namespace
+
 // Stores a newly uploaded receipt document.
 models::ReceiptDocument ReceiptService::uploadReceipt(const std::string& userId,
                                                       const std::string& fileName,
@@ -18,6 +55,9 @@ models::ReceiptDocument ReceiptService::uploadReceipt(const std::string& userId,
                                                       const models::Date& uploadedAt) {
     if (userId.empty() || fileName.empty()) {
         throw std::invalid_argument("Receipt requires user and file name.");
+    }
+    if (trim(rawText).empty()) {
+        throw std::invalid_argument("Receipt text cannot be empty.");
     }
 
     models::ReceiptDocument receipt {
@@ -41,6 +81,17 @@ std::vector<models::ReceiptDocument> ReceiptService::listReceipts(const std::str
         }
     }
     return result;
+}
+
+// Returns one receipt when it belongs to the user.
+std::optional<models::ReceiptDocument> ReceiptService::findReceipt(const std::string& userId,
+                                                                   const std::string& receiptId) const {
+    for (const auto& receipt : receipts_) {
+        if (receipt.id == receiptId && receipt.userId == userId) {
+            return receipt;
+        }
+    }
+    return std::nullopt;
 }
 
 // Parses receipt text into a lightweight structured result.
@@ -89,6 +140,16 @@ models::ReceiptParseResult ReceiptService::parseReceipt(const std::string& userI
     return result;
 }
 
+// Returns the latest parsed result for a receipt.
+std::optional<models::ReceiptParseResult> ReceiptService::findParsedReceipt(const std::string& receiptId) const {
+    for (const auto& parsed : parsedReceipts_) {
+        if (parsed.receiptId == receiptId) {
+            return parsed;
+        }
+    }
+    return std::nullopt;
+}
+
 // Converts a confirmed receipt into a saved transaction.
 models::Transaction ReceiptService::confirmReceiptAsTransaction(
     const std::string& userId,
@@ -100,6 +161,15 @@ models::Transaction ReceiptService::confirmReceiptAsTransaction(
     if (receiptIt == receipts_.end()) {
         throw std::out_of_range("Receipt not found.");
     }
+    if (confirmation.title.empty()) {
+        throw std::invalid_argument("Receipt confirmation requires a transaction title.");
+    }
+    if (confirmation.categoryId.empty()) {
+        throw std::invalid_argument("Receipt confirmation requires a category.");
+    }
+    if (confirmation.amount <= 0.0) {
+        throw std::invalid_argument("Receipt confirmation amount must be greater than 0.");
+    }
 
     models::Transaction transaction {
         .userId = userId,
@@ -110,10 +180,12 @@ models::Transaction ReceiptService::confirmReceiptAsTransaction(
         .amount = confirmation.amount,
         .date = confirmation.date,
         .merchant = confirmation.merchant,
+        .tags = {"receipt", confirmation.receiptId},
     };
 
+    auto savedTransaction = transactionService.addTransaction(transaction);
     receiptIt->status = models::ReceiptStatus::Confirmed;
-    return transactionService.addTransaction(transaction);
+    return savedTransaction;
 }
 
 // Returns every stored receipt document.
@@ -156,6 +228,7 @@ std::vector<std::string> ReceiptService::splitLines(const std::string& text) {
     std::istringstream stream(text);
     std::string line;
     while (std::getline(stream, line)) {
+        line = trim(line);
         if (!line.empty()) {
             lines.push_back(line);
         }
@@ -165,17 +238,26 @@ std::vector<std::string> ReceiptService::splitLines(const std::string& text) {
 
 // Extracts the first amount-like value from receipt lines.
 std::optional<double> ReceiptService::firstAmount(const std::vector<std::string>& lines) {
-    const std::regex amountPattern(R"((\d+(?:\.\d{1,2})?))");
     for (const auto& line : lines) {
-        std::smatch match;
-        if (std::regex_search(line, match, amountPattern)) {
-            try {
-                return std::stod(match[1].str());
-            } catch (...) {
+        if (models::containsCaseInsensitive(line, "grand total") ||
+            models::containsCaseInsensitive(line, "total") ||
+            models::containsCaseInsensitive(line, "amount due") ||
+            models::containsCaseInsensitive(line, "paid")) {
+            if (auto amount = amountFromLine(line)) {
+                return amount;
             }
         }
     }
-    return std::nullopt;
+
+    std::optional<double> bestAmount;
+    for (const auto& line : lines) {
+        if (auto amount = amountFromLine(line)) {
+            if (!bestAmount || *amount > *bestAmount) {
+                bestAmount = amount;
+            }
+        }
+    }
+    return bestAmount;
 }
 
 // Extracts the first date-like value from receipt lines.

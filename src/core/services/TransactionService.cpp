@@ -35,6 +35,21 @@ bool filterMatches(const models::Transaction& transaction,
     return true;
 }
 
+void validateCategoryInput(const std::string& userId,
+                           const std::string& name,
+                           const std::string& icon,
+                           bool builtIn) {
+    if (!builtIn && userId.empty()) {
+        throw std::invalid_argument("Custom category requires a user.");
+    }
+    if (name.empty()) {
+        throw std::invalid_argument("Category name is required.");
+    }
+    if (icon.empty()) {
+        throw std::invalid_argument("Category icon is required.");
+    }
+}
+
 }  // namespace
 
 // Seeds the service with the built-in categories used by the app.
@@ -77,8 +92,17 @@ models::Category TransactionService::createCategory(const std::string& userId,
                                                     models::CategoryKind kind,
                                                     const std::string& icon,
                                                     bool builtIn) {
-    if (name.empty()) {
-        throw std::invalid_argument("Category name is required.");
+    validateCategoryInput(userId, name, icon, builtIn);
+    const auto normalizedName = models::toLower(name);
+    for (const auto& existing : categories_) {
+        const bool sameOwner = existing.builtIn || builtIn ||
+                               existing.userId == userId ||
+                               (existing.userId.empty() && builtIn);
+        if (sameOwner &&
+            existing.kind == kind &&
+            models::toLower(existing.name) == normalizedName) {
+            throw std::invalid_argument("Category already exists for this type.");
+        }
     }
     models::Category category {
         .id = nextId("cat"),
@@ -93,6 +117,34 @@ models::Category TransactionService::createCategory(const std::string& userId,
     return category;
 }
 
+// Updates one custom category owned by a user.
+models::Category TransactionService::updateCategory(const std::string& userId,
+                                                    const std::string& categoryId,
+                                                    const std::string& name,
+                                                    models::CategoryKind kind,
+                                                    const std::string& icon) {
+    validateCategoryInput(userId, name, icon, false);
+    const auto normalizedName = models::toLower(name);
+    for (const auto& existing : categories_) {
+        if (existing.id != categoryId &&
+            (existing.builtIn || existing.userId == userId) &&
+            existing.kind == kind &&
+            models::toLower(existing.name) == normalizedName) {
+            throw std::invalid_argument("Category already exists for this type.");
+        }
+    }
+
+    for (auto& category : categories_) {
+        if (category.id == categoryId && !category.builtIn && category.userId == userId) {
+            category.name = name;
+            category.kind = kind;
+            category.icon = icon;
+            return category;
+        }
+    }
+    throw std::out_of_range("Custom category not found.");
+}
+
 // Deletes one custom category owned by a user.
 void TransactionService::deleteCategory(const std::string& userId, const std::string& categoryId) {
     auto iterator = std::find_if(categories_.begin(), categories_.end(), [&](const auto& category) {
@@ -101,7 +153,27 @@ void TransactionService::deleteCategory(const std::string& userId, const std::st
     if (iterator == categories_.end()) {
         throw std::out_of_range("Custom category not found.");
     }
+    if (categoryInUse(categoryId)) {
+        throw std::invalid_argument("Category cannot be deleted while transactions still use it.");
+    }
     categories_.erase(iterator);
+}
+
+// Returns a category copy by id when present.
+std::optional<models::Category> TransactionService::findCategory(const std::string& categoryId) const {
+    for (const auto& category : categories_) {
+        if (category.id == categoryId) {
+            return category;
+        }
+    }
+    return std::nullopt;
+}
+
+// Checks whether a category is referenced by any transaction.
+bool TransactionService::categoryInUse(const std::string& categoryId) const {
+    return std::any_of(transactions_.begin(), transactions_.end(), [&](const auto& transaction) {
+        return transaction.categoryId == categoryId;
+    });
 }
 
 // Validates and stores a new transaction.
@@ -193,6 +265,18 @@ double TransactionService::sumTransactions(const std::string& userId,
         if (transaction.userId == userId &&
             transaction.type == type &&
             models::inMonth(transaction.date, period)) {
+            total += transaction.amount;
+        }
+    }
+    return total;
+}
+
+// Sums one transaction type across all dates.
+double TransactionService::sumTransactions(const std::string& userId,
+                                           models::TransactionType type) const {
+    double total = 0.0;
+    for (const auto& transaction : transactions_) {
+        if (transaction.userId == userId && transaction.type == type) {
             total += transaction.amount;
         }
     }

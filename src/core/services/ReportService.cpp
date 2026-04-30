@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <map>
 #include <sstream>
+#include <stdexcept>
 
 using namespace std;
 
@@ -16,6 +17,13 @@ namespace finsight::core::services {
 models::FinancialReport ReportService::generateReport(const models::ReportRequest& request,
                                                       const TransactionService& transactionService,
                                                       const BudgetService& budgetService) const {
+    if (request.userId.empty()) {
+        throw std::invalid_argument("Report requires a user.");
+    }
+    if (request.to < request.from) {
+        throw std::invalid_argument("Report end date cannot be before start date.");
+    }
+
     models::TransactionFilter filter;
     filter.from = request.from;
     filter.to = request.to;
@@ -58,6 +66,43 @@ models::FinancialReport ReportService::generateReport(const models::ReportReques
     text << "Expenses: " << report.totalExpenses << "\n";
     text << "Net: " << report.net << "\n";
     text << "Transactions: " << report.transactions.size() << "\n";
+    text << "\nCategory Expenses\n";
+    if (report.categoryExpenses.empty()) {
+        text << "- None\n";
+    } else {
+        for (const auto& line : report.categoryExpenses) {
+            text << "- " << line.categoryName << ": " << line.amount << "\n";
+        }
+    }
+    text << "\nBudget Impact\n";
+    if (report.impactedBudgets.empty()) {
+        text << "- No budgets configured for " << currentPeriod.year << '-'
+             << std::setw(2) << std::setfill('0') << currentPeriod.month << "\n";
+        text << std::setfill(' ');
+    } else {
+        for (const auto& status : report.impactedBudgets) {
+            const auto& category = transactionService.requireCategory(status.budget.categoryId);
+            text << "- " << category.name
+                 << ": limit " << status.budget.limit
+                 << ", spent " << status.spent
+                 << ", remaining " << status.remaining
+                 << (status.overspent ? " (overspent)" : "")
+                 << "\n";
+        }
+    }
+    text << "\nTransactions\n";
+    if (report.transactions.empty()) {
+        text << "- None\n";
+    } else {
+        for (const auto& transaction : report.transactions) {
+            const auto& category = transactionService.requireCategory(transaction.categoryId);
+            text << "- " << transaction.date.toString()
+                 << " | " << (transaction.type == models::TransactionType::Income ? "Income" : "Expense")
+                 << " | " << category.name
+                 << " | " << transaction.title
+                 << " | " << transaction.amount << "\n";
+        }
+    }
     report.exportedText = text.str();
 
     return report;

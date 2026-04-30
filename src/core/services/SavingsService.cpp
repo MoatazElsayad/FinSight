@@ -9,14 +9,79 @@ using namespace std;
 
 namespace finsight::core::services {
 
+namespace {
+
+void validateSavingsEntry(const models::SavingsEntry& entry) {
+    if (entry.userId.empty()) {
+        throw std::invalid_argument("Savings entry requires a user.");
+    }
+    if (entry.amount <= 0.0) {
+        throw std::invalid_argument("Savings entry amount must be greater than 0.");
+    }
+}
+
+void validateSavingsGoal(const std::string& userId,
+                         double monthlyTarget,
+                         double longTermTarget) {
+    if (userId.empty()) {
+        throw std::invalid_argument("Savings goal requires a user.");
+    }
+    if (monthlyTarget < 0.0 || longTermTarget < 0.0) {
+        throw std::invalid_argument("Savings targets cannot be negative.");
+    }
+}
+
+void validateInvestment(const models::Investment& investment) {
+    if (investment.userId.empty()) {
+        throw std::invalid_argument("Investment requires a user.");
+    }
+    if (investment.assetName.empty()) {
+        throw std::invalid_argument("Investment requires an asset name.");
+    }
+    if (investment.quantity <= 0.0) {
+        throw std::invalid_argument("Investment quantity must be greater than 0.");
+    }
+    if (investment.buyRate < 0.0 || investment.currentRate < 0.0) {
+        throw std::invalid_argument("Investment rates cannot be negative.");
+    }
+}
+
+}  // namespace
+
 // Adds one savings entry to the ledger.
 models::SavingsEntry SavingsService::addEntry(models::SavingsEntry entry) {
-    if (entry.userId.empty() || entry.amount <= 0.0) {
-        throw std::invalid_argument("Savings entry requires user and positive amount.");
-    }
+    validateSavingsEntry(entry);
     entry.id = nextEntryId();
     entries_.push_back(entry);
     return entry;
+}
+
+// Records a savings deposit.
+models::SavingsEntry SavingsService::addDeposit(const std::string& userId,
+                                                double amount,
+                                                const models::Date& date,
+                                                const std::string& note) {
+    return addEntry(models::SavingsEntry {
+        .userId = userId,
+        .type = models::SavingsEntryType::Deposit,
+        .amount = amount,
+        .date = date,
+        .note = note,
+    });
+}
+
+// Records a savings withdrawal.
+models::SavingsEntry SavingsService::addWithdrawal(const std::string& userId,
+                                                   double amount,
+                                                   const models::Date& date,
+                                                   const std::string& note) {
+    return addEntry(models::SavingsEntry {
+        .userId = userId,
+        .type = models::SavingsEntryType::Withdrawal,
+        .amount = amount,
+        .date = date,
+        .note = note,
+    });
 }
 
 // Deletes one savings entry.
@@ -49,6 +114,7 @@ models::SavingsGoal SavingsService::setGoal(const std::string& userId,
                                             double monthlyTarget,
                                             double longTermTarget,
                                             const models::Date& targetDate) {
+    validateSavingsGoal(userId, monthlyTarget, longTermTarget);
     for (auto& goal : goals_) {
         if (goal.userId == userId) {
             goal.monthlyTarget = monthlyTarget;
@@ -67,6 +133,16 @@ models::SavingsGoal SavingsService::setGoal(const std::string& userId,
     };
     goals_.push_back(goal);
     return goal;
+}
+
+// Returns the user's savings target when one has been configured.
+std::optional<models::SavingsGoal> SavingsService::getGoal(const std::string& userId) const {
+    for (const auto& goal : goals_) {
+        if (goal.userId == userId) {
+            return goal;
+        }
+    }
+    return std::nullopt;
 }
 
 // Builds a monthly savings summary.
@@ -103,9 +179,7 @@ models::SavingsOverview SavingsService::summarize(const std::string& userId,
 
 // Adds a new investment position.
 models::Investment SavingsService::addInvestment(models::Investment investment) {
-    if (investment.userId.empty() || investment.assetName.empty() || investment.quantity <= 0.0) {
-        throw std::invalid_argument("Investment requires user, asset name, and quantity.");
-    }
+    validateInvestment(investment);
     investment.id = nextInvestmentId();
     investments_.push_back(investment);
     return investment;
@@ -115,9 +189,30 @@ models::Investment SavingsService::addInvestment(models::Investment investment) 
 models::Investment SavingsService::updateInvestmentRate(const std::string& userId,
                                                         const std::string& investmentId,
                                                         double currentRate) {
+    if (currentRate < 0.0) {
+        throw std::invalid_argument("Investment current rate cannot be negative.");
+    }
     for (auto& investment : investments_) {
         if (investment.id == investmentId && investment.userId == userId) {
             investment.currentRate = currentRate;
+            return investment;
+        }
+    }
+    throw std::out_of_range("Investment not found.");
+}
+
+// Updates the editable fields for one investment.
+models::Investment SavingsService::updateInvestment(const std::string& userId,
+                                                    const std::string& investmentId,
+                                                    const models::Investment& updatedInvestment) {
+    models::Investment candidate = updatedInvestment;
+    candidate.id = investmentId;
+    candidate.userId = userId;
+    validateInvestment(candidate);
+
+    for (auto& investment : investments_) {
+        if (investment.id == investmentId && investment.userId == userId) {
+            investment = candidate;
             return investment;
         }
     }

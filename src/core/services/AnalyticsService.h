@@ -32,6 +32,18 @@ struct MonthlyOverview {
     double savingsRate {0.0};
 };
 
+// Compares high-level financial totals between two periods.
+struct MonthlyOverviewComparison {
+    models::YearMonth currentPeriod;
+    models::YearMonth previousPeriod;
+    MonthlyOverview current;
+    MonthlyOverview previous;
+    double incomeDelta {0.0};
+    double expensesDelta {0.0};
+    double netSavingsDelta {0.0};
+    double savingsRateDelta {0.0};
+};
+
 // Stores the combined dashboard data used by the app.
 struct DashboardInsights {
     MonthlyOverview overview;
@@ -51,6 +63,11 @@ public:
                                      const BudgetService& budgetService,
                                      const SavingsService& savingsService,
                                      const GoalService& goalService) const;
+    // Compares income, expenses, net savings, and savings rate across two months.
+    MonthlyOverviewComparison compareOverview(const std::string& userId,
+                                              const models::YearMonth& current,
+                                              const models::YearMonth& previous,
+                                              const TransactionService& transactionService) const;
 };
 
 }  // namespace finsight::core::services

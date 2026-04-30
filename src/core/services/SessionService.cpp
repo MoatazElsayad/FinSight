@@ -2,6 +2,7 @@
 
 #include <regex>
 #include <sstream>
+#include <stdexcept>
 
 using namespace std;
 
@@ -9,6 +10,9 @@ namespace finsight::core::services {
 
 // Starts and stores a new user session.
 models::Session SessionService::startSession(const std::string& userId, const models::Date& issuedOn) {
+    if (userId.empty()) {
+        throw std::invalid_argument("Session requires a user.");
+    }
     models::Session session {
         .token = nextToken(),
         .userId = userId,
@@ -37,6 +41,12 @@ std::optional<models::Session> SessionService::getSession(const std::string& tok
         }
     }
     return std::nullopt;
+}
+
+// Checks whether a session token exists and is still active.
+bool SessionService::isSessionActive(const std::string& token) const {
+    const auto session = getSession(token);
+    return session.has_value() && session->active;
 }
 
 // Returns all sessions belonging to one user.

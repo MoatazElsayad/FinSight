@@ -4,6 +4,7 @@
 #include "../models/Transaction.h"
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -26,8 +27,18 @@ public:
                                     models::CategoryKind kind,
                                     const std::string& icon,
                                     bool builtIn = false);
+    // Updates one custom category owned by a user.
+    models::Category updateCategory(const std::string& userId,
+                                    const std::string& categoryId,
+                                    const std::string& name,
+                                    models::CategoryKind kind,
+                                    const std::string& icon);
     // Deletes one custom category.
     void deleteCategory(const std::string& userId, const std::string& categoryId);
+    // Returns a category by id if present.
+    std::optional<models::Category> findCategory(const std::string& categoryId) const;
+    // Returns whether any transaction still references a category.
+    bool categoryInUse(const std::string& categoryId) const;
 
     // Adds a new transaction.
     models::Transaction addTransaction(models::Transaction transaction);
@@ -49,6 +60,9 @@ public:
     double sumTransactions(const std::string& userId,
                            models::TransactionType type,
                            const models::YearMonth& period) const;
+    // Sums one transaction type across all dates.
+    double sumTransactions(const std::string& userId,
+                           models::TransactionType type) const;
     // Calculates category spending for one month.
     double spentForCategory(const std::string& userId,
                             const std::string& categoryId,

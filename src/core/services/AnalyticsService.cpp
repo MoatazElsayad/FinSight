@@ -12,6 +12,21 @@ using namespace std;
 
 namespace finsight::core::services {
 
+namespace {
+
+MonthlyOverview buildMonthlyOverview(const std::string& userId,
+                                     const models::YearMonth& period,
+                                     const TransactionService& transactionService) {
+    MonthlyOverview overview {};
+    overview.income = transactionService.sumTransactions(userId, models::TransactionType::Income, period);
+    overview.expenses = transactionService.sumTransactions(userId, models::TransactionType::Expense, period);
+    overview.netSavings = overview.income - overview.expenses;
+    overview.savingsRate = overview.income <= 0.0 ? 0.0 : overview.netSavings / overview.income;
+    return overview;
+}
+
+}  // namespace
+
 // Builds the combined dashboard data from the finance services.
 DashboardInsights AnalyticsService::buildDashboard(const std::string& userId,
                                                    const models::YearMonth& period,
@@ -20,14 +35,7 @@ DashboardInsights AnalyticsService::buildDashboard(const std::string& userId,
                                                    const SavingsService& savingsService,
                                                    const GoalService& goalService) const {
     DashboardInsights insights {};
-    insights.overview.income =
-        transactionService.sumTransactions(userId, models::TransactionType::Income, period);
-    insights.overview.expenses =
-        transactionService.sumTransactions(userId, models::TransactionType::Expense, period);
-    insights.overview.netSavings = insights.overview.income - insights.overview.expenses;
-    insights.overview.savingsRate = insights.overview.income <= 0.0
-                                        ? 0.0
-                                        : insights.overview.netSavings / insights.overview.income;
+    insights.overview = buildMonthlyOverview(userId, period, transactionService);
 
     std::unordered_map<std::string, double> categoryTotals;
     for (const auto& transaction : transactionService.listTransactions(userId)) {
@@ -61,6 +69,25 @@ DashboardInsights AnalyticsService::buildDashboard(const std::string& userId,
         }
     }
     return insights;
+}
+
+// Compares high-level finance totals between two months.
+MonthlyOverviewComparison AnalyticsService::compareOverview(
+    const std::string& userId,
+    const models::YearMonth& current,
+    const models::YearMonth& previous,
+    const TransactionService& transactionService) const {
+    MonthlyOverviewComparison comparison {
+        .currentPeriod = current,
+        .previousPeriod = previous,
+        .current = buildMonthlyOverview(userId, current, transactionService),
+        .previous = buildMonthlyOverview(userId, previous, transactionService),
+    };
+    comparison.incomeDelta = comparison.current.income - comparison.previous.income;
+    comparison.expensesDelta = comparison.current.expenses - comparison.previous.expenses;
+    comparison.netSavingsDelta = comparison.current.netSavings - comparison.previous.netSavings;
+    comparison.savingsRateDelta = comparison.current.savingsRate - comparison.previous.savingsRate;
+    return comparison;
 }
 
 }  // namespace finsight::core::services

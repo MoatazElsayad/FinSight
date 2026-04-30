@@ -21,10 +21,15 @@ public:
                                           const models::Date& uploadedAt);
     // Returns all receipts owned by a user.
     std::vector<models::ReceiptDocument> listReceipts(const std::string& userId) const;
+    // Returns one receipt if it belongs to the user.
+    std::optional<models::ReceiptDocument> findReceipt(const std::string& userId,
+                                                       const std::string& receiptId) const;
     // Parses raw receipt text into structured suggestions.
     models::ReceiptParseResult parseReceipt(const std::string& userId,
                                             const std::string& receiptId,
                                             const TransactionService& transactionService);
+    // Returns the latest parsed result for a receipt if present.
+    std::optional<models::ReceiptParseResult> findParsedReceipt(const std::string& receiptId) const;
     // Converts a confirmed receipt into a stored transaction.
     models::Transaction confirmReceiptAsTransaction(const std::string& userId,
                                                     const models::ReceiptConfirmation& confirmation,
