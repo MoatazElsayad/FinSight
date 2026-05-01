@@ -72,15 +72,49 @@ target_link_libraries(finsight_terminal_demo PRIVATE finsight_core)
 
 add_executable(finsight_gui
     src/gui/main_gui.cpp
+
     src/gui/MainWindow.cpp
+    src/gui/MainWindow.h
+
     src/gui/auth/LoginDialog.cpp
+    src/gui/auth/LoginDialog.h
     src/gui/auth/RegisterDialog.cpp
+    src/gui/auth/RegisterDialog.h
+
     src/gui/dashboard/DashboardWindow.cpp
+    src/gui/dashboard/DashboardWindow.h
+
     src/gui/profile/ProfileWindow.cpp
+    src/gui/profile/ProfileWindow.h
+
     src/gui/transactions/TransactionsWindow.cpp
+    src/gui/transactions/TransactionsWindow.h
     src/gui/transactions/TransactionDialog.cpp
+    src/gui/transactions/TransactionDialog.h
+
     src/gui/budgets/BudgetsWindow.cpp
+    src/gui/budgets/BudgetsWindow.h
+
     src/gui/ai/AIInsightsWindow.cpp
+    src/gui/ai/AIInsightsWindow.h
+
+    src/gui/savings/SavingsWindow.cpp
+    src/gui/savings/SavingsWindow.h
+
+    src/gui/investments/InvestmentsWindow.cpp
+    src/gui/investments/InvestmentsWindow.h
+
+    src/gui/goals/GoalsWindow.cpp
+    src/gui/goals/GoalsWindow.h
+
+    src/gui/reports/ReportsWindow.cpp
+    src/gui/reports/ReportsWindow.h
+
+    src/gui/receipts/ReceiptsWindow.cpp
+    src/gui/receipts/ReceiptsWindow.h
+
+    src/gui/categories/CategoriesWindow.cpp
+    src/gui/categories/CategoriesWindow.h
 )
 
 target_include_directories(finsight_gui PRIVATE src)

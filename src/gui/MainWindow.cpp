@@ -3,6 +3,12 @@
 #include "gui/auth/RegisterDialog.h"
 #include "gui/profile/ProfileWindow.h"
 #include "gui/ai/AIInsightsWindow.h"
+#include "gui/savings/SavingsWindow.h"
+#include "gui/investments/InvestmentsWindow.h"
+#include "gui/goals/GoalsWindow.h"
+#include "gui/reports/ReportsWindow.h"
+#include "gui/receipts/ReceiptsWindow.h"
+#include "gui/categories/CategoriesWindow.h"
 #include "gui/dashboard/DashboardWindow.h"
 #include "gui/transactions/TransactionsWindow.h"
 #include "gui/budgets/BudgetsWindow.h"
@@ -54,6 +60,12 @@ void MainWindow::setupUi() {
     budgetsButton = new QPushButton("Budgets");
     profileButton = new QPushButton("Profile");
     aiInsightsButton = new QPushButton("AI Insights");
+    savingsButton = new QPushButton("Savings");
+    investmentsButton = new QPushButton("Investments");
+    goalsButton = new QPushButton("Goals");
+    reportsButton = new QPushButton("Reports");
+    receiptsButton = new QPushButton("Receipts / OCR");
+    categoriesButton = new QPushButton("Categories");
     logoutButton = new QPushButton("Logout");
 
     navLayout->addWidget(dashboardButton);
@@ -61,6 +73,12 @@ void MainWindow::setupUi() {
     navLayout->addWidget(budgetsButton);
     navLayout->addWidget(profileButton);
     navLayout->addWidget(aiInsightsButton);
+    navLayout->addWidget(savingsButton);
+    navLayout->addWidget(investmentsButton);
+    navLayout->addWidget(goalsButton);
+    navLayout->addWidget(reportsButton);
+    navLayout->addWidget(receiptsButton);
+    navLayout->addWidget(categoriesButton);
     navLayout->addSpacing(10);
     navLayout->addWidget(logoutButton);
     navLayout->addStretch();
@@ -81,12 +99,24 @@ void MainWindow::setupUi() {
     budgetsPage = new BudgetsWindow(backend_, userId_);
     profilePage = new ProfileWindow(backend_, userId_);
     aiInsightsPage = new AIInsightsWindow(backend_, userId_);
+    savingsPage = new SavingsWindow(backend_, userId_);
+    investmentsPage = new InvestmentsWindow(backend_, userId_);
+    goalsPage = new GoalsWindow(backend_, userId_);
+    reportsPage = new ReportsWindow(backend_, userId_);
+    receiptsPage = new ReceiptsWindow(backend_, userId_);
+    categoriesPage = new CategoriesWindow(backend_, userId_);
 
     stack->addWidget(dashboardPage);
     stack->addWidget(transactionsPage);
     stack->addWidget(budgetsPage);
     stack->addWidget(profilePage);
     stack->addWidget(aiInsightsPage);
+    stack->addWidget(savingsPage);
+    stack->addWidget(investmentsPage);
+    stack->addWidget(goalsPage);
+    stack->addWidget(reportsPage);
+    stack->addWidget(receiptsPage);
+    stack->addWidget(categoriesPage);
 
     mainLayout->addWidget(navFrame);
     mainLayout->addWidget(stack, 1);
@@ -119,6 +149,12 @@ void MainWindow::connectSignals() {
         aiInsightsPage->refreshData();
         stack->setCurrentWidget(aiInsightsPage);
     });
+    connect(savingsButton, &QPushButton::clicked, this, [this]() { savingsPage->refreshData(); stack->setCurrentWidget(savingsPage); });
+    connect(investmentsButton, &QPushButton::clicked, this, [this]() { investmentsPage->refreshData(); stack->setCurrentWidget(investmentsPage); });
+    connect(goalsButton, &QPushButton::clicked, this, [this]() { goalsPage->refreshData(); stack->setCurrentWidget(goalsPage); });
+    connect(reportsButton, &QPushButton::clicked, this, [this]() { reportsPage->refreshData(); stack->setCurrentWidget(reportsPage); });
+    connect(receiptsButton, &QPushButton::clicked, this, [this]() { receiptsPage->refreshData(); stack->setCurrentWidget(receiptsPage); });
+    connect(categoriesButton, &QPushButton::clicked, this, [this]() { categoriesPage->refreshData(); stack->setCurrentWidget(categoriesPage); });
     connect(logoutButton, &QPushButton::clicked, this, [this]() {
         clearCurrentUser();
         if (!promptForAuthentication()) {
@@ -135,6 +171,11 @@ void MainWindow::connectSignals() {
     connect(profilePage, &ProfileWindow::profileUpdated, this, [this]() {
         refreshPages();
     });
+    connect(savingsPage, &SavingsWindow::dataChanged, this, [this]() { refreshPages(); });
+    connect(investmentsPage, &InvestmentsWindow::dataChanged, this, [this]() { refreshPages(); });
+    connect(goalsPage, &GoalsWindow::dataChanged, this, [this]() { refreshPages(); });
+    connect(receiptsPage, &ReceiptsWindow::dataChanged, this, [this]() { refreshPages(); });
+    connect(categoriesPage, &CategoriesWindow::dataChanged, this, [this]() { refreshPages(); });
 }
 
 void MainWindow::refreshPages() {
@@ -143,6 +184,12 @@ void MainWindow::refreshPages() {
     budgetsPage->refreshData();
     profilePage->refreshData();
     aiInsightsPage->refreshData();
+    savingsPage->refreshData();
+    investmentsPage->refreshData();
+    goalsPage->refreshData();
+    reportsPage->refreshData();
+    receiptsPage->refreshData();
+    categoriesPage->refreshData();
 }
 
 bool MainWindow::promptForAuthentication() {
@@ -197,6 +244,12 @@ void MainWindow::setCurrentUser(const std::string& userId) {
     budgetsPage->setUserId(userId_);
     profilePage->setUserId(userId_);
     aiInsightsPage->setUserId(userId_);
+    savingsPage->setUserId(userId_);
+    investmentsPage->setUserId(userId_);
+    goalsPage->setUserId(userId_);
+    reportsPage->setUserId(userId_);
+    receiptsPage->setUserId(userId_);
+    categoriesPage->setUserId(userId_);
     refreshPages();
     stack->setCurrentWidget(dashboardPage);
 }
@@ -212,6 +265,12 @@ void MainWindow::clearCurrentUser() {
     budgetsPage->setUserId(userId_);
     profilePage->setUserId(userId_);
     aiInsightsPage->setUserId(userId_);
+    savingsPage->setUserId(userId_);
+    investmentsPage->setUserId(userId_);
+    goalsPage->setUserId(userId_);
+    reportsPage->setUserId(userId_);
+    receiptsPage->setUserId(userId_);
+    categoriesPage->setUserId(userId_);
     refreshPages();
 }
 
