@@ -24,6 +24,7 @@ struct AIProviderConfig {
         "mistralai/mistral-7b-instruct:free",
         "qwen/qwen-2.5-vl-7b-instruct:free",
         "liquid/lfm-2.5-1.2b-instruct:free",
+        "minimax/minimax-m2.5:free",
         "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
         "meta-llama/llama-3.2-3b-instruct:free"
     };

@@ -20,6 +20,7 @@ struct EmailMessage {
     string to;
     string subject;
     string body;
+    string htmlBody;
 };
 
 // Stores the result of one send attempt.

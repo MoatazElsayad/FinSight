@@ -313,6 +313,7 @@ void TransactionsWindow::onAddTransaction() {
 
         const auto alerts = backend_.budgetAlerts().notifyBudgetExceededByTransaction(
             transaction,
+            backend_.ai(),
             backend_.auth(),
             backend_.transactions(),
             backend_.budgets(),
@@ -320,9 +321,13 @@ void TransactionsWindow::onAddTransaction() {
         if (!alerts.empty()) {
             QStringList messages;
             for (const auto& alert : alerts) {
+                QString status = alert.success ? QStringLiteral("email sent") : QStringLiteral("email failed");
+                if (!alert.success && !alert.error.empty()) {
+                    status += QStringLiteral(" - ") + QString::fromStdString(alert.error);
+                }
                 messages << QString("Budget alert for %1: %2")
                                 .arg(QString::fromStdString(alert.recipient))
-                                .arg(alert.success ? "email sent" : "email failed");
+                                .arg(status);
             }
             QMessageBox::information(this, "Budget Alerts", messages.join("\n"));
         }

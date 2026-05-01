@@ -16,6 +16,7 @@
 #include <QMessageBox>
 #include <QAbstractItemView>
 
+#include <exception>
 #include <utility>
 
 using namespace finsight::core::models;
@@ -377,14 +378,18 @@ void BudgetsWindow::onAddBudget() {
         return;
     }
 
-    backend_.budgets().createBudget(
-        userId_,
-        categoryCombo->currentData().toString().toStdString(),
-        selectedPeriod(),
-        budgeted);
-    refreshData();
-    clearInputs();
-    emit dataChanged();
+    try {
+        backend_.budgets().setBudget(
+            userId_,
+            categoryCombo->currentData().toString().toStdString(),
+            selectedPeriod(),
+            budgeted);
+        refreshData();
+        clearInputs();
+        emit dataChanged();
+    } catch (const std::exception& error) {
+        QMessageBox::warning(this, "Budget Error", error.what());
+    }
 }
 
 void BudgetsWindow::onEditBudget() {
@@ -405,19 +410,23 @@ void BudgetsWindow::onEditBudget() {
         return;
     }
 
-    backend_.budgets().updateBudget(
-        userId_,
-        budget->id,
-        Budget {
-            .id = budget->id,
-            .userId = userId_,
-            .categoryId = categoryCombo->currentData().toString().toStdString(),
-            .period = selectedPeriod(),
-            .limit = budgeted,
-        });
-    refreshData();
-    clearInputs();
-    emit dataChanged();
+    try {
+        backend_.budgets().updateBudget(
+            userId_,
+            budget->id,
+            Budget {
+                .id = budget->id,
+                .userId = userId_,
+                .categoryId = categoryCombo->currentData().toString().toStdString(),
+                .period = selectedPeriod(),
+                .limit = budgeted,
+            });
+        refreshData();
+        clearInputs();
+        emit dataChanged();
+    } catch (const std::exception& error) {
+        QMessageBox::warning(this, "Budget Error", error.what());
+    }
 }
 
 void BudgetsWindow::onDeleteBudget() {

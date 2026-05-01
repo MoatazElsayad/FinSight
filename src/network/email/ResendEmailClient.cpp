@@ -7,11 +7,11 @@ using namespace std;
 namespace finsight::network::email {
 
 ResendEmailClient::ResendEmailClient() {
-    httpClient_.setTimeout(20);
+    httpClient_.setTimeout(10);
 }
 
 bool hasRealKey(const string& apiKey) {
-    return !apiKey.empty() && apiKey != "PASTE_REAL_RESEND_API_KEY_HERE";
+    return apiKey.rfind("re_", 0) == 0 && apiKey != "PASTE_REAL_RESEND_API_KEY_HERE";
 }
 
 core::models::EmailSendResult ResendEmailClient::send(const core::models::EmailProviderConfig& config,
@@ -46,7 +46,7 @@ core::models::EmailSendResult ResendEmailClient::send(const core::models::EmailP
     httpRequest.method = finsight::network::protocol::HttpMethod::Post;
     httpRequest.url = config.apiUrl;
     httpRequest.body = payload;
-    httpRequest.timeoutSeconds = 20;
+    httpRequest.timeoutSeconds = 10;
     httpRequest.headers.insert(std::make_pair("Authorization", "Bearer " + config.apiKey));
     httpRequest.headers.insert(std::make_pair("Content-Type", "application/json"));
 
@@ -58,9 +58,9 @@ core::models::EmailSendResult ResendEmailClient::send(const core::models::EmailP
                   httpResult.response.body.find("\"id\":") != string::npos &&
                   httpResult.response.body.find("\"message\"") == string::npos;
     if (!result.success) {
-        result.error = httpResult.response.error.empty()
-                           ? "Request failed"
-                           : httpResult.response.error;
+        result.error = !httpResult.response.error.empty()
+                           ? httpResult.response.error
+                           : (httpResult.response.body.empty() ? "Request failed" : httpResult.response.body);
     }
 
     return result;
@@ -95,12 +95,19 @@ string ResendEmailClient::escapeJson(const string& value) const {
 
 string ResendEmailClient::buildPayload(const core::models::EmailProviderConfig& config,
                                        const core::models::EmailMessage& message) const {
+    const string sender = config.fromName.empty()
+                              ? config.fromEmail
+                              : config.fromName + " <" + config.fromEmail + ">";
+
     ostringstream payload;
     payload << "{";
-    payload << "\"from\":\"" << escapeJson(config.fromEmail) << "\",";
+    payload << "\"from\":\"" << escapeJson(sender) << "\",";
     payload << "\"to\":\"" << escapeJson(message.to) << "\",";
     payload << "\"subject\":\"" << escapeJson(message.subject) << "\",";
-    payload << "\"html\":\"" << escapeJson(message.body) << "\"";
+    payload << "\"text\":\"" << escapeJson(message.body) << "\"";
+    if (!message.htmlBody.empty()) {
+        payload << ",\"html\":\"" << escapeJson(message.htmlBody) << "\"";
+    }
     payload << "}";
     return payload.str();
 }
