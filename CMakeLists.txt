@@ -139,3 +139,38 @@ target_link_libraries(finsight_gui PRIVATE
 if(Qt6Svg_FOUND OR Qt5Svg_FOUND)
     target_link_libraries(finsight_gui PRIVATE ${QT_PACKAGE}::Svg)
 endif()
+# gtest
+include(FetchContent)
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG        v1.14.0
+)
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+enable_testing()
+add_subdirectory(tests)
+
+# TCP networking library 
+add_library(finsight_tcp
+    src/network/tcp/TcpServer.cpp
+    src/network/tcp/BackendMessageHandler.cpp
+)
+target_include_directories(finsight_tcp PUBLIC src)
+target_link_libraries(finsight_tcp PUBLIC
+    finsight_core
+    Boost::system
+)
+
+# Server executable
+add_executable(finsight_server src/apps/server_main.cpp)
+target_include_directories(finsight_server PRIVATE src)
+target_link_libraries(finsight_server PRIVATE finsight_tcp)
+
+# Client executable
+add_executable(finsight_client src/apps/client_main.cpp)
+target_include_directories(finsight_client PRIVATE src)
+target_link_libraries(finsight_client PRIVATE
+    finsight_core
+    Boost::system
+)
