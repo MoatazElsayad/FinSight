@@ -1,30 +1,39 @@
 #include "gui/MainWindow.h"
-#include "gui/auth/LoginDialog.h"
-#include "gui/auth/RegisterDialog.h"
+
 #include "data/storage/BackendStore.h"
 
-#include <filesystem>
-
+#include "gui/auth/LoginDialog.h"
+#include "gui/auth/RegisterDialog.h"
 #include "gui/profile/ProfileWindow.h"
+#include "gui/ai/AIInsightsWindow.h"
+#include "gui/savings/SavingsWindow.h"
+#include "gui/investments/InvestmentsWindow.h"
+#include "gui/goals/GoalsWindow.h"
+#include "gui/reports/ReportsWindow.h"
+#include "gui/receipts/ReceiptsWindow.h"
+#include "gui/categories/CategoriesWindow.h"
 #include "gui/dashboard/DashboardWindow.h"
 #include "gui/transactions/TransactionsWindow.h"
 #include "gui/budgets/BudgetsWindow.h"
 
-#include <QDate>
-#include <QLabel>
-#include <QMessageBox>
-#include <QWidget>
-#include <QHBoxLayout>
-#include <QVBoxLayout>
-#include <QPushButton>
-#include <QStackedWidget>
-#include <QFrame>
 #include <QApplication>
 #include <QButtonGroup>
-#include <QSizePolicy>
-#include <QScreen>
-#include <QPixmap>
+#include <QDate>
+#include <QFrame>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QMessageBox>
 #include <QPainter>
+#include <QPixmap>
+#include <QPushButton>
+#include <QScreen>
+#include <QSizePolicy>
+#include <QStackedWidget>
+#include <QVBoxLayout>
+#include <QWidget>
+
+#include <filesystem>
+#include <exception>
 
 // Conditionally include SVG support if available
 #ifdef QT_SVG_LIB
@@ -41,7 +50,7 @@ MainWindow::MainWindow(finsight::core::managers::FinanceTrackerBackend& backend,
       persistDirectory_(std::move(persistDirectory)) {
     setupUi();
     connectSignals();
-    showLoginPage();  // Start with login page
+    showLoginPage();
 }
 
 void MainWindow::persistNow() {
@@ -87,9 +96,8 @@ void MainWindow::setupUi() {
 
     auto *logoLabel = new QLabel();
     logoLabel->setAlignment(Qt::AlignCenter);
-    
+
 #ifdef QT_SVG_LIB
-    // Load SVG logo if available
     QSvgRenderer renderer("assets/logo.svg");
     QPixmap pixmap(52, 52);
     pixmap.fill(Qt::transparent);
@@ -97,7 +105,6 @@ void MainWindow::setupUi() {
     renderer.render(&painter);
     logoLabel->setPixmap(pixmap.scaledToWidth(52, Qt::SmoothTransformation));
 #else
-    // Fallback: Use styled text logo
     logoLabel->setText("F");
     logoLabel->setStyleSheet(
         "QLabel {"
@@ -117,19 +124,35 @@ void MainWindow::setupUi() {
     transactionsButton = new QPushButton("Transactions");
     budgetsButton = new QPushButton("Budgets");
     profileButton = new QPushButton("Profile");
+    aiInsightsButton = new QPushButton("AI Insights");
+    savingsButton = new QPushButton("Savings");
+    investmentsButton = new QPushButton("Investments");
+    goalsButton = new QPushButton("Goals");
+    reportsButton = new QPushButton("Reports");
+    receiptsButton = new QPushButton("Receipts / OCR");
+    categoriesButton = new QPushButton("Categories");
     logoutButton = new QPushButton("Logout");
-
-    dashboardButton->setCheckable(true);
-    transactionsButton->setCheckable(true);
-    budgetsButton->setCheckable(true);
-    profileButton->setCheckable(true);
 
     auto *navGroup = new QButtonGroup(this);
     navGroup->setExclusive(true);
-    navGroup->addButton(dashboardButton);
-    navGroup->addButton(transactionsButton);
-    navGroup->addButton(budgetsButton);
-    navGroup->addButton(profileButton);
+
+    for (auto *button : {
+             dashboardButton,
+             transactionsButton,
+             budgetsButton,
+             profileButton,
+             aiInsightsButton,
+             savingsButton,
+             investmentsButton,
+             goalsButton,
+             reportsButton,
+             receiptsButton,
+             categoriesButton
+         }) {
+        button->setCheckable(true);
+        navGroup->addButton(button);
+    }
+
     dashboardButton->setChecked(true);
 
     navLayout->addWidget(logoLabel);
@@ -138,13 +161,20 @@ void MainWindow::setupUi() {
     navLayout->addWidget(transactionsButton);
     navLayout->addWidget(budgetsButton);
     navLayout->addWidget(profileButton);
-    navLayout->addSpacing(16);
+    navLayout->addWidget(aiInsightsButton);
+    navLayout->addWidget(savingsButton);
+    navLayout->addWidget(investmentsButton);
+    navLayout->addWidget(goalsButton);
+    navLayout->addWidget(reportsButton);
+    navLayout->addWidget(receiptsButton);
+    navLayout->addWidget(categoriesButton);
+    navLayout->addSpacing(10);
     navLayout->addWidget(logoutButton);
     navLayout->addStretch();
 
     navFrame = new QFrame();
     navFrame->setObjectName("navigationPanel");
-    navFrame->setFixedWidth(120);
+    navFrame->setFixedWidth(180);
     navFrame->setStyleSheet(
         "QFrame {"
         "  background-color: #0f1a33;"
@@ -160,12 +190,26 @@ void MainWindow::setupUi() {
     transactionsPage = new TransactionsWindow(backend_, userId_);
     budgetsPage = new BudgetsWindow(backend_, userId_);
     profilePage = new ProfileWindow(backend_, userId_);
+    aiInsightsPage = new AIInsightsWindow(backend_, userId_);
+    savingsPage = new SavingsWindow(backend_, userId_);
+    investmentsPage = new InvestmentsWindow(backend_, userId_);
+    goalsPage = new GoalsWindow(backend_, userId_);
+    reportsPage = new ReportsWindow(backend_, userId_);
+    receiptsPage = new ReceiptsWindow(backend_, userId_);
+    categoriesPage = new CategoriesWindow(backend_, userId_);
 
     stack->addWidget(loginPage);
     stack->addWidget(dashboardPage);
     stack->addWidget(transactionsPage);
     stack->addWidget(budgetsPage);
     stack->addWidget(profilePage);
+    stack->addWidget(aiInsightsPage);
+    stack->addWidget(savingsPage);
+    stack->addWidget(investmentsPage);
+    stack->addWidget(goalsPage);
+    stack->addWidget(reportsPage);
+    stack->addWidget(receiptsPage);
+    stack->addWidget(categoriesPage);
 
     auto *rightSide = new QWidget();
     auto *rightLayout = new QVBoxLayout(rightSide);
@@ -187,11 +231,14 @@ void MainWindow::setupUi() {
 
     auto *currentViewLayout = new QVBoxLayout();
     currentViewLayout->setSpacing(2);
+
     auto *viewLabel = new QLabel("CURRENT VIEW");
     viewLabel->setStyleSheet("color: #8ec1ff; font-size: 10px; letter-spacing: 1.2px; font-weight: 700;");
+
     pageLabel = new QLabel("Dashboard");
     pageLabel->setObjectName("pageLabel");
     pageLabel->setStyleSheet("color: #ffffff; font-size: 20px; font-weight: 800;");
+
     currentViewLayout->addWidget(viewLabel);
     currentViewLayout->addWidget(pageLabel);
 
@@ -200,9 +247,11 @@ void MainWindow::setupUi() {
 
     auto *actionsLayout = new QHBoxLayout();
     actionsLayout->setSpacing(10);
+
     auto *fullscreenButton = new QPushButton("⌖");
     auto *addButton = new QPushButton("＋");
     auto *themeButton = new QPushButton("☀");
+
     for (auto *button : {fullscreenButton, addButton, themeButton}) {
         button->setFixedSize(42, 42);
         button->setStyleSheet(
@@ -216,6 +265,7 @@ void MainWindow::setupUi() {
             "QPushButton:hover { background-color: #1a2742; }"
         );
     }
+
     actionsLayout->addWidget(fullscreenButton);
     actionsLayout->addWidget(addButton);
     actionsLayout->addWidget(themeButton);
@@ -223,6 +273,7 @@ void MainWindow::setupUi() {
     auto *profileLabel = new QLabel("User");
     profileLabel->setObjectName("profileLabel");
     profileLabel->setStyleSheet("color: #ffffff; font-weight: 700; font-size: 13px; margin-left: 18px;");
+
     auto *profileBadge = new QLabel("EGP 0");
     profileBadge->setObjectName("profileBadge");
     profileBadge->setStyleSheet(
@@ -248,14 +299,13 @@ void MainWindow::setupUi() {
     setCentralWidget(central);
     setWindowTitle("FinSight");
 
-    // Make window fullscreen
     showFullScreen();
 }
 
 void MainWindow::connectSignals() {
     connect(loginPage, &LoginDialog::loginSuccessful, this, &MainWindow::showMainInterface);
+
     connect(loginPage, &LoginDialog::registerRequested, this, [this]() {
-        // Handle registration
         RegisterDialog registerDialog(this);
         if (registerDialog.exec() == QDialog::Accepted) {
             try {
@@ -266,6 +316,7 @@ void MainWindow::connectSignals() {
                     registerDialog.gender().toStdString(),
                     registerDialog.password().toStdString(),
                     today());
+
                 showMainInterface(QString::fromStdString(user.id));
             } catch (const std::exception& error) {
                 QMessageBox::warning(this, "Register Failed", error.what());
@@ -290,11 +341,55 @@ void MainWindow::connectSignals() {
         budgetsPage->refreshData();
         stack->setCurrentWidget(budgetsPage);
     });
+
     connect(profileButton, &QPushButton::clicked, this, [this]() {
         pageLabel->setText("Profile");
         profilePage->refreshData();
         stack->setCurrentWidget(profilePage);
     });
+
+    connect(aiInsightsButton, &QPushButton::clicked, this, [this]() {
+        pageLabel->setText("AI Insights");
+        aiInsightsPage->refreshData();
+        stack->setCurrentWidget(aiInsightsPage);
+    });
+
+    connect(savingsButton, &QPushButton::clicked, this, [this]() {
+        pageLabel->setText("Savings");
+        savingsPage->refreshData();
+        stack->setCurrentWidget(savingsPage);
+    });
+
+    connect(investmentsButton, &QPushButton::clicked, this, [this]() {
+        pageLabel->setText("Investments");
+        investmentsPage->refreshData();
+        stack->setCurrentWidget(investmentsPage);
+    });
+
+    connect(goalsButton, &QPushButton::clicked, this, [this]() {
+        pageLabel->setText("Goals");
+        goalsPage->refreshData();
+        stack->setCurrentWidget(goalsPage);
+    });
+
+    connect(reportsButton, &QPushButton::clicked, this, [this]() {
+        pageLabel->setText("Reports");
+        reportsPage->refreshData();
+        stack->setCurrentWidget(reportsPage);
+    });
+
+    connect(receiptsButton, &QPushButton::clicked, this, [this]() {
+        pageLabel->setText("Receipts / OCR");
+        receiptsPage->refreshData();
+        stack->setCurrentWidget(receiptsPage);
+    });
+
+    connect(categoriesButton, &QPushButton::clicked, this, [this]() {
+        pageLabel->setText("Categories");
+        categoriesPage->refreshData();
+        stack->setCurrentWidget(categoriesPage);
+    });
+
     connect(logoutButton, &QPushButton::clicked, this, [this]() {
         persistNow();
         clearCurrentUser();
@@ -305,11 +400,38 @@ void MainWindow::connectSignals() {
         refreshPages();
         persistNow();
     });
+
     connect(budgetsPage, &BudgetsWindow::dataChanged, this, [this]() {
         refreshPages();
         persistNow();
     });
+
     connect(profilePage, &ProfileWindow::profileUpdated, this, [this]() {
+        refreshPages();
+        persistNow();
+    });
+
+    connect(savingsPage, &SavingsWindow::dataChanged, this, [this]() {
+        refreshPages();
+        persistNow();
+    });
+
+    connect(investmentsPage, &InvestmentsWindow::dataChanged, this, [this]() {
+        refreshPages();
+        persistNow();
+    });
+
+    connect(goalsPage, &GoalsWindow::dataChanged, this, [this]() {
+        refreshPages();
+        persistNow();
+    });
+
+    connect(receiptsPage, &ReceiptsWindow::dataChanged, this, [this]() {
+        refreshPages();
+        persistNow();
+    });
+
+    connect(categoriesPage, &CategoriesWindow::dataChanged, this, [this]() {
         refreshPages();
         persistNow();
     });
@@ -320,19 +442,36 @@ void MainWindow::refreshPages() {
     transactionsPage->refreshData();
     budgetsPage->refreshData();
     profilePage->refreshData();
+    aiInsightsPage->refreshData();
+    savingsPage->refreshData();
+    investmentsPage->refreshData();
+    goalsPage->refreshData();
+    reportsPage->refreshData();
+    receiptsPage->refreshData();
+    categoriesPage->refreshData();
 }
 
 void MainWindow::setCurrentUser(const std::string& userId) {
     userId_ = userId;
+
     const auto session = backend_.sessions().startSession(userId_, today());
     activeSessionToken_ = session.token;
+
     dashboardPage->setUserId(userId_);
     transactionsPage->setUserId(userId_);
     budgetsPage->setUserId(userId_);
     profilePage->setUserId(userId_);
-    
-    auto* profileLabel = findChild<QLabel*>("profileLabel");
-    auto* profileBadge = findChild<QLabel*>("profileBadge");
+    aiInsightsPage->setUserId(userId_);
+    savingsPage->setUserId(userId_);
+    investmentsPage->setUserId(userId_);
+    goalsPage->setUserId(userId_);
+    reportsPage->setUserId(userId_);
+    receiptsPage->setUserId(userId_);
+    categoriesPage->setUserId(userId_);
+
+    auto *profileLabel = findChild<QLabel*>("profileLabel");
+    auto *profileBadge = findChild<QLabel*>("profileBadge");
+
     if (profileLabel) {
         try {
             const auto& user = backend_.auth().getUser(userId);
@@ -341,14 +480,24 @@ void MainWindow::setCurrentUser(const std::string& userId) {
             profileLabel->setText("User");
         }
     }
+
     if (profileBadge) {
-        double balance = backend_.transactions().sumTransactions(userId, finsight::core::models::TransactionType::Income, {})
-                     - backend_.transactions().sumTransactions(userId, finsight::core::models::TransactionType::Expense, {});
-        profileBadge->setText("EGP " + QString::number(balance, 'f', 0));
+        try {
+            const double balance =
+                backend_.transactions().sumTransactions(userId, finsight::core::models::TransactionType::Income, {})
+                - backend_.transactions().sumTransactions(userId, finsight::core::models::TransactionType::Expense, {});
+
+            profileBadge->setText("EGP " + QString::number(balance, 'f', 0));
+        } catch (...) {
+            profileBadge->setText("EGP 0");
+        }
     }
-    
+
     refreshPages();
     persistNow();
+
+    pageLabel->setText("Dashboard");
+    dashboardButton->setChecked(true);
     stack->setCurrentWidget(dashboardPage);
 }
 
@@ -356,39 +505,58 @@ void MainWindow::clearCurrentUser() {
     if (activeSessionToken_.has_value()) {
         backend_.sessions().endSession(*activeSessionToken_);
     }
+
     activeSessionToken_.reset();
     userId_.clear();
+
     dashboardPage->setUserId(userId_);
     transactionsPage->setUserId(userId_);
     budgetsPage->setUserId(userId_);
     profilePage->setUserId(userId_);
+    aiInsightsPage->setUserId(userId_);
+    savingsPage->setUserId(userId_);
+    investmentsPage->setUserId(userId_);
+    goalsPage->setUserId(userId_);
+    reportsPage->setUserId(userId_);
+    receiptsPage->setUserId(userId_);
+    categoriesPage->setUserId(userId_);
+
     refreshPages();
 }
 
 finsight::core::models::Date MainWindow::today() {
     const auto currentDate = QDate::currentDate();
-    return finsight::core::models::Date {currentDate.year(), currentDate.month(), currentDate.day()};
+    return finsight::core::models::Date {
+        currentDate.year(),
+        currentDate.month(),
+        currentDate.day()
+    };
 }
 
 void MainWindow::showLoginPage() {
-    // Hide navigation and top bar when showing login page
     if (navFrame) {
         navFrame->hide();
     }
+
     if (topBar) {
         topBar->hide();
     }
+
     stack->setCurrentWidget(loginPage);
 }
 
 void MainWindow::showMainInterface(const QString& userId) {
     setCurrentUser(userId.toStdString());
-    // Show navigation and top bar when showing main interface
+
     if (navFrame) {
         navFrame->show();
     }
+
     if (topBar) {
         topBar->show();
     }
+
+    pageLabel->setText("Dashboard");
+    dashboardButton->setChecked(true);
     stack->setCurrentWidget(dashboardPage);
 }
