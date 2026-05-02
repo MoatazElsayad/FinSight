@@ -33,9 +33,23 @@ std::string BackendMessageHandler::handle(std::string json) {
 
     std::cout << "[server] got command: " << command << std::endl;
 
-    // ping - just check if server is alive
-    if (command == "ping") {
-        return "{\"status\":\"ok\",\"message\":\"pong\"}";
+    // loz - just check if server is alive
+    if (command == "loz") {return "{\"status\":\"ok\",\"message\":\"goz\"}";
+    }
+
+// help - returns a list of all available commands
+    if (command == "help") {
+        std::string response = "{\"status\":\"ok\",\"commands\":[";
+        response += "\"ping\",";
+        response += "\"help\",";
+        response += "\"register\",";
+        response += "\"login\",";
+        response += "\"add_transaction\",";
+        response += "\"list_transactions\",";
+        response += "\"dashboard_summary\",";
+        response += "\"generate_report\"";
+        response += "]}";
+        return response;
     }
 
     // register - create a new user account
