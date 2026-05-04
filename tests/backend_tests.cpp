@@ -4,6 +4,7 @@
 #include "core/services/SessionService.h"
 #include "core/services/TransactionService.h"
 #include "core/services/BudgetService.h"
+#include "core/services/SavingsService.h"
 #include "network/tcp/IMessageHandler.h"
 
 using namespace finsight::core::services;
@@ -199,6 +200,30 @@ TEST(BudgetTest, OverspendingDetected) {
     EXPECT_TRUE(statuses.front().overspent);
     EXPECT_NEAR(statuses.front().spent,     150.0,  0.001);
     EXPECT_NEAR(statuses.front().remaining, -50.0,  0.001);
+}
+
+TEST(SavingsTest, RejectsWithdrawalBeyondCurrentBalance) {
+    SavingsService savings;
+
+    savings.addDeposit("usr-1", 500.0, today());
+
+    EXPECT_THROW(
+        savings.addWithdrawal("usr-1", 600.0, today()),
+        std::invalid_argument
+    );
+
+    const auto overview = savings.summarize("usr-1", YearMonth {2026, 5});
+    EXPECT_DOUBLE_EQ(overview.currentBalance, 500.0);
+}
+
+TEST(SavingsTest, AllowsWithdrawalUpToCurrentBalance) {
+    SavingsService savings;
+
+    savings.addDeposit("usr-1", 500.0, today());
+    savings.addWithdrawal("usr-1", 500.0, today());
+
+    const auto overview = savings.summarize("usr-1", YearMonth {2026, 5});
+    EXPECT_DOUBLE_EQ(overview.currentBalance, 0.0);
 }
 
 // Mock: handler called with correct input 

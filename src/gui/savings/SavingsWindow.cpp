@@ -18,6 +18,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <cmath>
 #include <exception>
 
 using namespace finsight::core::models;
@@ -319,6 +320,7 @@ void SavingsWindow::refreshData() {
         longTermTargetValue->setText(QStringLiteral("Long-term target: EGP 0.00"));
         targetDateValue->setText(QStringLiteral("Target date: not set"));
         monthlyProgress->setValue(0);
+        monthlyProgress->setFormat(QStringLiteral("Set a savings target"));
         return;
     }
 
@@ -329,9 +331,33 @@ void SavingsWindow::refreshData() {
     monthlyTargetValue->setText(money(overview.monthlyTarget));
     longTermTargetValue->setText(QStringLiteral("Long-term target: ") + money(overview.longTermTarget));
 
-    const int progress = std::clamp(static_cast<int>(overview.progressToMonthlyTarget * 100.0), 0, 100);
-    monthlyProgress->setValue(progress);
-    monthlyProgress->setFormat(QStringLiteral("%1% monthly target").arg(progress));
+    const bool hasLongTermTarget = overview.longTermTarget > 0.0;
+    const bool hasMonthlyTarget = overview.monthlyTarget > 0.0;
+
+    double progressRatio = 0.0;
+    QString progressLabel;
+    if (hasLongTermTarget) {
+        progressRatio = overview.currentBalance / overview.longTermTarget;
+        progressLabel = QStringLiteral("long-term target");
+    } else if (hasMonthlyTarget) {
+        progressRatio = overview.progressToMonthlyTarget;
+        progressLabel = QStringLiteral("monthly target");
+    }
+
+    const double normalizedRatio = std::max(0.0, progressRatio);
+    const int shownPercent = static_cast<int>(std::round(normalizedRatio * 100.0));
+    const int progressValue = std::clamp(shownPercent, 0, 100);
+    monthlyProgress->setValue(progressValue);
+
+    if (progressLabel.isEmpty()) {
+        monthlyProgress->setFormat(QStringLiteral("Set a savings target"));
+    } else if (shownPercent >= 100) {
+        monthlyProgress->setFormat(QStringLiteral("Target achieved (%1%)").arg(shownPercent));
+    } else if (overview.currentBalance < 0.0 && hasLongTermTarget) {
+        monthlyProgress->setFormat(QStringLiteral("0% long-term target (balance below zero)"));
+    } else {
+        monthlyProgress->setFormat(QStringLiteral("%1% %2").arg(shownPercent).arg(progressLabel));
+    }
 
     if (const auto goal = backend_.savings().getGoal(userId_)) {
         monthlyTargetSpin->setValue(goal->monthlyTarget);

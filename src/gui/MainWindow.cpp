@@ -57,6 +57,18 @@ void MainWindow::persistNow() {
 }
 
 void MainWindow::setupUi() {
+    // Set window icon from logo.svg
+#ifdef QT_SVG_LIB
+    QSvgRenderer renderer("assets/logo.svg");
+    if (renderer.isValid()) {
+        QPixmap iconPixmap(256, 256);
+        iconPixmap.fill(Qt::transparent);
+        QPainter painter(&iconPixmap);
+        renderer.render(&painter);
+        setWindowIcon(QIcon(iconPixmap));
+    }
+#endif
+
     auto *central = new QWidget(this);
     central->setObjectName(QStringLiteral("appRoot"));
     auto *mainLayout = new QHBoxLayout(central);
@@ -238,6 +250,7 @@ void MainWindow::setupUi() {
         "padding: 8px 12px;"
         "font-weight: 700;"
     );
+    profileBadgeLabel = profileBadge;
 
     topBarLayout->addLayout(currentViewLayout);
     topBarLayout->addWidget(topBarSpacer);
@@ -281,6 +294,7 @@ void MainWindow::connectSignals() {
     connect(dashboardButton, &QPushButton::clicked, this, [this]() {
         pageLabel->setText("Dashboard");
         dashboardPage->refreshData();
+        updateProfileBadge();
         stack->setCurrentWidget(dashboardPage);
     });
 
@@ -382,7 +396,6 @@ void MainWindow::setCurrentUser(const std::string& userId) {
     receiptsPage->setUserId(userId_);
 
     auto *profileLabel = findChild<QLabel*>("profileLabel");
-    auto *profileBadge = findChild<QLabel*>("profileBadge");
 
     if (profileLabel) {
         try {
@@ -393,17 +406,7 @@ void MainWindow::setCurrentUser(const std::string& userId) {
         }
     }
 
-    if (profileBadge) {
-        try {
-            const double balance =
-                backend_.transactions().sumTransactions(userId, finsight::core::models::TransactionType::Income, {})
-                - backend_.transactions().sumTransactions(userId, finsight::core::models::TransactionType::Expense, {});
-
-            profileBadge->setText("EGP " + QString::number(balance, 'f', 0));
-        } catch (...) {
-            profileBadge->setText("EGP 0");
-        }
-    }
+    updateProfileBadge();
 
     refreshPages();
     persistNow();
@@ -439,6 +442,24 @@ finsight::core::models::Date MainWindow::today() {
         currentDate.month(),
         currentDate.day()
     };
+}
+
+void MainWindow::updateProfileBadge() {
+    if (!profileBadgeLabel || userId_.empty()) {
+        if (profileBadgeLabel) {
+            profileBadgeLabel->setText("EGP 0");
+        }
+        return;
+    }
+
+    try {
+        const double income = backend_.transactions().sumTransactions(userId_, finsight::core::models::TransactionType::Income);
+        const double expenses = backend_.transactions().sumTransactions(userId_, finsight::core::models::TransactionType::Expense);
+        const double balance = income - expenses;
+        profileBadgeLabel->setText("EGP " + QString::number(balance, 'f', 0));
+    } catch (...) {
+        profileBadgeLabel->setText("EGP 0");
+    }
 }
 
 void MainWindow::showLoginPage() {

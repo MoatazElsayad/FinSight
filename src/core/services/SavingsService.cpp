@@ -46,11 +46,29 @@ void validateInvestment(const models::Investment& investment) {
     }
 }
 
+double currentBalanceForUser(const std::vector<models::SavingsEntry>& entries,
+                             const std::string& userId) {
+    double balance = 0.0;
+    for (const auto& entry : entries) {
+        if (entry.userId != userId) {
+            continue;
+        }
+        balance += entry.type == models::SavingsEntryType::Deposit ? entry.amount : -entry.amount;
+    }
+    return balance;
+}
+
 }  // namespace
 
 // Adds one savings entry to the ledger.
 models::SavingsEntry SavingsService::addEntry(models::SavingsEntry entry) {
     validateSavingsEntry(entry);
+    if (entry.type == models::SavingsEntryType::Withdrawal) {
+        const double balance = currentBalanceForUser(entries_, entry.userId);
+        if (entry.amount > balance) {
+            throw std::invalid_argument("Withdrawal amount exceeds your current savings balance.");
+        }
+    }
     entry.id = nextEntryId();
     entries_.push_back(entry);
     return entry;

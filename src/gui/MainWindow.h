@@ -64,6 +64,8 @@ private:
     QPushButton *receiptsButton;
     QPushButton *logoutButton;
 
+    QLabel *profileBadgeLabel;
+
     void setupUi();
     void connectSignals();
     void refreshPages();
@@ -71,6 +73,7 @@ private:
     void clearCurrentUser();
     void showMainInterface(const QString& userId);
     void showLoginPage();
+    void updateProfileBadge();
     void persistNow();
     static finsight::core::models::Date today();
 };

@@ -496,9 +496,14 @@ void DashboardWindow::refreshData() {
     const double netSavings = income - expenses;
     const double savingsRate = income <= 0.0 ? 0.0 : netSavings / income;
 
+    // Calculate cumulative liquid cash (total income - total expenses across all time)
+    const double allTimeIncome = backend_.transactions().sumTransactions(userId_, TransactionType::Income);
+    const double allTimeExpenses = backend_.transactions().sumTransactions(userId_, TransactionType::Expense);
+    const double liquidCash = allTimeIncome - allTimeExpenses;
+
     incomeValueLabel->setText(finsight::gui::ui::formatMoney(income));
     expensesValueLabel->setText(finsight::gui::ui::formatMoney(expenses));
-    liquidCashValueLabel->setText(finsight::gui::ui::formatMoney(netSavings));
+    liquidCashValueLabel->setText(finsight::gui::ui::formatMoney(liquidCash));
     savingsRateValueLabel->setText(QString::number(savingsRate * 100.0, 'f', 2) + "%");
 
     std::vector<Transaction> latestAll = backend_.transactions().listTransactions(userId_);

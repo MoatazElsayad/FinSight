@@ -22,6 +22,9 @@
 #include <QBrush>
 #include <QColor>
 
+#include <exception>
+#include <stdexcept>
+
 using namespace finsight::core::models;
 
 TransactionsWindow::TransactionsWindow(finsight::core::managers::FinanceTrackerBackend& backend,
@@ -171,10 +174,19 @@ void TransactionsWindow::setupUi() {
 void TransactionsWindow::populateCategoryFilter() {
     categoryFilter->clear();
     categoryFilter->addItem("All", "");
-    for (const auto& category : backend_.transactions().getCategoriesForUser(userId_)) {
-        if (category.kind == CategoryKind::Income || category.kind == CategoryKind::Expense) {
-            categoryFilter->addItem(QString::fromStdString(category.name), QString::fromStdString(category.id));
+
+    if (userId_.empty()) {
+        return;
+    }
+
+    try {
+        for (const auto& category : backend_.transactions().getCategoriesForUser(userId_)) {
+            if (category.kind == CategoryKind::Income || category.kind == CategoryKind::Expense) {
+                categoryFilter->addItem(QString::fromStdString(category.name), QString::fromStdString(category.id));
+            }
         }
+    } catch (const std::exception& error) {
+        showOperationError(QStringLiteral("Load Categories"), error);
     }
 }
 
@@ -199,34 +211,74 @@ void TransactionsWindow::refreshData() {
     filter.from = Date::fromString(fromDateEdit->date().toString("yyyy-MM-dd").toStdString());
     filter.to = Date::fromString(toDateEdit->date().toString("yyyy-MM-dd").toStdString());
 
-    const auto transactions = backend_.transactions().filterTransactions(userId_, filter);
-    for (const auto& transaction : transactions) {
-        const auto& category = backend_.transactions().requireCategory(transaction.categoryId);
-        const int row = transactionsTable->rowCount();
-        transactionsTable->insertRow(row);
+    try {
+        const auto transactions = backend_.transactions().filterTransactions(userId_, filter);
+        for (const auto& transaction : transactions) {
+            QString categoryName = QStringLiteral("Unknown");
+            QString categoryId = QString::fromStdString(transaction.categoryId);
+            try {
+                const auto& category = backend_.transactions().requireCategory(transaction.categoryId);
+                categoryName = QString::fromStdString(category.name);
+            } catch (const std::out_of_range&) {
+            }
 
-        auto *dateItem = new QTableWidgetItem(QString::fromStdString(transaction.date.toString()));
-        dateItem->setData(Qt::UserRole, QString::fromStdString(transaction.id));
-        transactionsTable->setItem(row, 0, dateItem);
-        transactionsTable->setItem(row, 1, new QTableWidgetItem(QString::fromStdString(transaction.title)));
-        transactionsTable->setItem(row, 2, new QTableWidgetItem(
-            transaction.type == TransactionType::Income ? "Income" : "Expense"));
-        auto *categoryItem = new QTableWidgetItem(QString::fromStdString(category.name));
-        categoryItem->setData(Qt::UserRole, QString::fromStdString(category.id));
-        transactionsTable->setItem(row, 3, categoryItem);
-        auto *amountItem = new QTableWidgetItem(finsight::gui::ui::formatMoney(transaction.amount));
-        if (transaction.type == TransactionType::Income) {
-            amountItem->setForeground(QBrush(QColor(QStringLiteral("#8cf4b8"))));
-        } else {
-            amountItem->setForeground(QBrush(QColor(QStringLiteral("#ff9191"))));
+            const int row = transactionsTable->rowCount();
+            transactionsTable->insertRow(row);
+
+            auto *dateItem = new QTableWidgetItem(QString::fromStdString(transaction.date.toString()));
+            dateItem->setData(Qt::UserRole, QString::fromStdString(transaction.id));
+            transactionsTable->setItem(row, 0, dateItem);
+            transactionsTable->setItem(row, 1, new QTableWidgetItem(QString::fromStdString(transaction.title)));
+            transactionsTable->setItem(row, 2, new QTableWidgetItem(
+                transaction.type == TransactionType::Income ? "Income" : "Expense"));
+            auto *categoryItem = new QTableWidgetItem(categoryName);
+            categoryItem->setData(Qt::UserRole, categoryId);
+            transactionsTable->setItem(row, 3, categoryItem);
+            auto *amountItem = new QTableWidgetItem(finsight::gui::ui::formatMoney(transaction.amount));
+            if (transaction.type == TransactionType::Income) {
+                amountItem->setForeground(QBrush(QColor(QStringLiteral("#8cf4b8"))));
+            } else {
+                amountItem->setForeground(QBrush(QColor(QStringLiteral("#ff9191"))));
+            }
+            transactionsTable->setItem(row, 4, amountItem);
         }
-        transactionsTable->setItem(row, 4, amountItem);
+    } catch (const std::exception& error) {
+        showOperationError(QStringLiteral("Load Transactions"), error);
     }
 }
 
+bool TransactionsWindow::ensureSignedIn(const QString& actionTitle) {
+    if (!userId_.empty()) {
+        return true;
+    }
+
+    QMessageBox::warning(
+        this,
+        actionTitle,
+        QStringLiteral("Please log in before managing transactions."));
+    return false;
+}
+
+void TransactionsWindow::showOperationError(const QString& actionTitle, const std::exception& error) {
+    QMessageBox::warning(
+        this,
+        actionTitle,
+        QStringLiteral("Something went wrong while processing your request.\n\nDetails: %1")
+            .arg(QString::fromUtf8(error.what())));
+}
+
 void TransactionsWindow::onAddTransaction() {
+    if (!ensureSignedIn(QStringLiteral("Add Transaction"))) {
+        return;
+    }
+
     TransactionDialog dialog(backend_, userId_, this);
-    dialog.setAvailableCategories(backend_.transactions().getCategoriesForUser(userId_));
+    try {
+        dialog.setAvailableCategories(backend_.transactions().getCategoriesForUser(userId_));
+    } catch (const std::exception& error) {
+        showOperationError(QStringLiteral("Add Transaction"), error);
+        return;
+    }
 
     const int result = dialog.exec();
     if (dialog.categoriesChanged()) {
@@ -234,36 +286,50 @@ void TransactionsWindow::onAddTransaction() {
     }
 
     if (result == QDialog::Accepted) {
-        const auto transaction = backend_.transactions().addTransaction(Transaction {
-            .userId = userId_,
-            .title = dialog.title().toStdString(),
-            .description = dialog.description().toStdString(),
-            .categoryId = dialog.categoryId(),
-            .type = dialog.transactionType(),
-            .amount = dialog.amount(),
-            .date = Date::fromString(dialog.date().toStdString()),
-            .merchant = dialog.merchant().toStdString(),
-        });
+        Transaction transaction {};
+        try {
+            transaction = backend_.transactions().addTransaction(Transaction {
+                .userId = userId_,
+                .title = dialog.title().toStdString(),
+                .description = dialog.description().toStdString(),
+                .categoryId = dialog.categoryId(),
+                .type = dialog.transactionType(),
+                .amount = dialog.amount(),
+                .date = Date::fromString(dialog.date().toStdString()),
+                .merchant = dialog.merchant().toStdString(),
+            });
+        } catch (const std::exception& error) {
+            showOperationError(QStringLiteral("Add Transaction"), error);
+            return;
+        }
 
-        const auto alerts = backend_.budgetAlerts().notifyBudgetExceededByTransaction(
-            transaction,
-            backend_.ai(),
-            backend_.auth(),
-            backend_.transactions(),
-            backend_.budgets(),
-            backend_.email());
-        if (!alerts.empty()) {
-            QStringList messages;
-            for (const auto& alert : alerts) {
-                QString status = alert.success ? QStringLiteral("email sent") : QStringLiteral("email failed");
-                if (!alert.success && !alert.error.empty()) {
-                    status += QStringLiteral(" - ") + QString::fromStdString(alert.error);
+        try {
+            const auto alerts = backend_.budgetAlerts().notifyBudgetExceededByTransaction(
+                transaction,
+                backend_.ai(),
+                backend_.auth(),
+                backend_.transactions(),
+                backend_.budgets(),
+                backend_.email());
+            if (!alerts.empty()) {
+                QStringList messages;
+                for (const auto& alert : alerts) {
+                    QString status = alert.success ? QStringLiteral("email sent") : QStringLiteral("email failed");
+                    if (!alert.success && !alert.error.empty()) {
+                        status += QStringLiteral(" - ") + QString::fromStdString(alert.error);
+                    }
+                    messages << QString("Budget alert for %1: %2")
+                                    .arg(QString::fromStdString(alert.recipient))
+                                    .arg(status);
                 }
-                messages << QString("Budget alert for %1: %2")
-                                .arg(QString::fromStdString(alert.recipient))
-                                .arg(status);
+                QMessageBox::information(this, "Budget Alerts", messages.join("\n"));
             }
-            QMessageBox::information(this, "Budget Alerts", messages.join("\n"));
+        } catch (const std::exception& error) {
+            QMessageBox::warning(
+                this,
+                QStringLiteral("Budget Alerts"),
+                QStringLiteral("The transaction was saved, but budget alerts could not be sent.\n\n%1")
+                    .arg(QString::fromUtf8(error.what())));
         }
         refreshData();
         emit dataChanged();
@@ -274,6 +340,10 @@ void TransactionsWindow::onAddTransaction() {
 }
 
 void TransactionsWindow::onEditTransaction() {
+    if (!ensureSignedIn(QStringLiteral("Edit Transaction"))) {
+        return;
+    }
+
     const auto transaction = selectedTransaction();
     if (!transaction) {
         QMessageBox::information(this, "Edit Transaction", "Please select a transaction first.");
@@ -282,7 +352,12 @@ void TransactionsWindow::onEditTransaction() {
 
     TransactionDialog dialog(backend_, userId_, this);
     dialog.setDialogTitle("Edit Transaction");
-    dialog.setAvailableCategories(backend_.transactions().getCategoriesForUser(userId_));
+    try {
+        dialog.setAvailableCategories(backend_.transactions().getCategoriesForUser(userId_));
+    } catch (const std::exception& error) {
+        showOperationError(QStringLiteral("Edit Transaction"), error);
+        return;
+    }
     dialog.setDate(QString::fromStdString(transaction->date.toString()));
     dialog.setTitle(QString::fromStdString(transaction->title));
     dialog.setType(transaction->type == TransactionType::Income ? "Income" : "Expense");
@@ -297,20 +372,25 @@ void TransactionsWindow::onEditTransaction() {
     }
 
     if (result == QDialog::Accepted) {
-        backend_.transactions().updateTransaction(
-            userId_,
-            transaction->id,
-            Transaction {
-                .id = transaction->id,
-                .userId = userId_,
-                .title = dialog.title().toStdString(),
-                .description = dialog.description().toStdString(),
-                .categoryId = dialog.categoryId(),
-                .type = dialog.transactionType(),
-                .amount = dialog.amount(),
-                .date = Date::fromString(dialog.date().toStdString()),
-                .merchant = dialog.merchant().toStdString(),
-            });
+        try {
+            backend_.transactions().updateTransaction(
+                userId_,
+                transaction->id,
+                Transaction {
+                    .id = transaction->id,
+                    .userId = userId_,
+                    .title = dialog.title().toStdString(),
+                    .description = dialog.description().toStdString(),
+                    .categoryId = dialog.categoryId(),
+                    .type = dialog.transactionType(),
+                    .amount = dialog.amount(),
+                    .date = Date::fromString(dialog.date().toStdString()),
+                    .merchant = dialog.merchant().toStdString(),
+                });
+        } catch (const std::exception& error) {
+            showOperationError(QStringLiteral("Edit Transaction"), error);
+            return;
+        }
         refreshData();
         emit dataChanged();
     } else if (dialog.categoriesChanged()) {
@@ -320,17 +400,35 @@ void TransactionsWindow::onEditTransaction() {
 }
 
 void TransactionsWindow::onDeleteTransaction() {
+    if (!ensureSignedIn(QStringLiteral("Delete Transaction"))) {
+        return;
+    }
+
     const auto transaction = selectedTransaction();
     if (!transaction) {
         QMessageBox::information(this, "Delete Transaction", "Please select a transaction first.");
         return;
     }
-    backend_.transactions().deleteTransaction(userId_, transaction->id);
+
+    const auto confirm = QMessageBox::question(
+        this,
+        QStringLiteral("Delete Transaction"),
+        QStringLiteral("Delete \"%1\" permanently?").arg(QString::fromStdString(transaction->title)));
+    if (confirm != QMessageBox::Yes) {
+        return;
+    }
+
+    try {
+        backend_.transactions().deleteTransaction(userId_, transaction->id);
+    } catch (const std::exception& error) {
+        showOperationError(QStringLiteral("Delete Transaction"), error);
+        return;
+    }
     refreshData();
     emit dataChanged();
 }
 
-std::optional<Transaction> TransactionsWindow::selectedTransaction() const {
+std::optional<Transaction> TransactionsWindow::selectedTransaction() {
     const int currentRow = transactionsTable->currentRow();
     if (currentRow < 0 || transactionsTable->item(currentRow, 0) == nullptr) {
         return std::nullopt;
@@ -338,10 +436,15 @@ std::optional<Transaction> TransactionsWindow::selectedTransaction() const {
 
     const std::string transactionId =
         transactionsTable->item(currentRow, 0)->data(Qt::UserRole).toString().toStdString();
-    for (const auto& transaction : backend_.transactions().listTransactions(userId_)) {
-        if (transaction.id == transactionId) {
-            return transaction;
+    try {
+        for (const auto& transaction : backend_.transactions().listTransactions(userId_)) {
+            if (transaction.id == transactionId) {
+                return transaction;
+            }
         }
+    } catch (const std::exception& error) {
+        showOperationError(QStringLiteral("Select Transaction"), error);
+        return std::nullopt;
     }
     return std::nullopt;
 }
