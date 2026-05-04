@@ -4,14 +4,11 @@
 
 #include "gui/auth/LoginDialog.h"
 #include "gui/auth/RegisterDialog.h"
+#include "gui/FinSightUi.h"
 #include "gui/profile/ProfileWindow.h"
-#include "gui/ai/AIInsightsWindow.h"
 #include "gui/savings/SavingsWindow.h"
-#include "gui/investments/InvestmentsWindow.h"
 #include "gui/goals/GoalsWindow.h"
-#include "gui/reports/ReportsWindow.h"
 #include "gui/receipts/ReceiptsWindow.h"
-#include "gui/categories/CategoriesWindow.h"
 #include "gui/dashboard/DashboardWindow.h"
 #include "gui/transactions/TransactionsWindow.h"
 #include "gui/budgets/BudgetsWindow.h"
@@ -60,30 +57,27 @@ void MainWindow::persistNow() {
 }
 
 void MainWindow::setupUi() {
+    // Set window icon from logo.svg
+#ifdef QT_SVG_LIB
+    QSvgRenderer renderer("assets/logo.svg");
+    if (renderer.isValid()) {
+        QPixmap iconPixmap(256, 256);
+        iconPixmap.fill(Qt::transparent);
+        QPainter painter(&iconPixmap);
+        renderer.render(&painter);
+        setWindowIcon(QIcon(iconPixmap));
+    }
+#endif
+
     auto *central = new QWidget(this);
+    central->setObjectName(QStringLiteral("appRoot"));
     auto *mainLayout = new QHBoxLayout(central);
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
     setStyleSheet(
-        "QMainWindow, QWidget { background-color: #0a1428; color: #e5e9f4; }"
-        "QPushButton {"
-        "  background-color: transparent;"
-        "  border: 1px solid transparent;"
-        "  border-radius: 14px;"
-        "  color: #dce4f8;"
-        "  text-align: left;"
-        "  padding: 14px 12px;"
-        "  font-weight: 600;"
-        "  font-size: 14px;"
-        "}"
-        "QPushButton:hover { background-color: #1a2f5a; }"
-        "QPushButton:pressed { background-color: #233d72; }"
-        "QPushButton:checked {"
-        "  background-color: #2e5aa6;"
-        "  border-color: #5b8cff;"
-        "  color: #ffffff;"
-        "}"
+        "QMainWindow, QWidget#appRoot { background-color: #0a1428; color: #e5e9f4; }"
+        "QLabel { background-color: transparent; }"
         "QFrame#navigationPanel {"
         "  background-color: #0f1a33;"
         "  border-right: 1px solid #1a2f5a;"
@@ -91,8 +85,8 @@ void MainWindow::setupUi() {
     );
 
     auto *navLayout = new QVBoxLayout();
-    navLayout->setContentsMargins(16, 16, 16, 16);
-    navLayout->setSpacing(12);
+    navLayout->setContentsMargins(14, 16, 14, 16);
+    navLayout->setSpacing(8);
 
     auto *logoLabel = new QLabel();
     logoLabel->setAlignment(Qt::AlignCenter);
@@ -124,13 +118,9 @@ void MainWindow::setupUi() {
     transactionsButton = new QPushButton("Transactions");
     budgetsButton = new QPushButton("Budgets");
     profileButton = new QPushButton("Profile");
-    aiInsightsButton = new QPushButton("AI Insights");
     savingsButton = new QPushButton("Savings");
-    investmentsButton = new QPushButton("Investments");
     goalsButton = new QPushButton("Goals");
-    reportsButton = new QPushButton("Reports");
-    receiptsButton = new QPushButton("Receipts / OCR");
-    categoriesButton = new QPushButton("Categories");
+    receiptsButton = new QPushButton("Receipt Parser");
     logoutButton = new QPushButton("Logout");
 
     auto *navGroup = new QButtonGroup(this);
@@ -141,40 +131,50 @@ void MainWindow::setupUi() {
              transactionsButton,
              budgetsButton,
              profileButton,
-             aiInsightsButton,
              savingsButton,
-             investmentsButton,
              goalsButton,
-             reportsButton,
-             receiptsButton,
-             categoriesButton
+             receiptsButton
          }) {
         button->setCheckable(true);
+        button->setStyleSheet(finsight::gui::ui::navButtonStyle());
         navGroup->addButton(button);
     }
 
+    logoutButton->setStyleSheet(finsight::gui::ui::dangerButtonStyle());
     dashboardButton->setChecked(true);
 
+    auto *brandName = new QLabel(QStringLiteral("FinSight"));
+    brandName->setAlignment(Qt::AlignCenter);
+    brandName->setStyleSheet(QStringLiteral("color: #ffffff; font-size: 18px; font-weight: 800;"));
+
+    auto makeSectionLabel = [](const QString& text) {
+        auto *label = new QLabel(text);
+        label->setStyleSheet(QStringLiteral(
+            "color: #72809a; font-size: 10px; font-weight: 800; letter-spacing: 1px; "
+            "padding: 12px 8px 4px 8px;"));
+        return label;
+    };
+
     navLayout->addWidget(logoLabel);
-    navLayout->addSpacing(4);
+    navLayout->addWidget(brandName);
+    navLayout->addSpacing(8);
+    navLayout->addWidget(makeSectionLabel(QStringLiteral("OVERVIEW")));
     navLayout->addWidget(dashboardButton);
+    navLayout->addWidget(makeSectionLabel(QStringLiteral("MANAGE")));
     navLayout->addWidget(transactionsButton);
     navLayout->addWidget(budgetsButton);
-    navLayout->addWidget(profileButton);
-    navLayout->addWidget(aiInsightsButton);
     navLayout->addWidget(savingsButton);
-    navLayout->addWidget(investmentsButton);
     navLayout->addWidget(goalsButton);
-    navLayout->addWidget(reportsButton);
+    navLayout->addWidget(makeSectionLabel(QStringLiteral("TOOLS")));
     navLayout->addWidget(receiptsButton);
-    navLayout->addWidget(categoriesButton);
-    navLayout->addSpacing(10);
-    navLayout->addWidget(logoutButton);
     navLayout->addStretch();
+    navLayout->addWidget(makeSectionLabel(QStringLiteral("ACCOUNT")));
+    navLayout->addWidget(profileButton);
+    navLayout->addWidget(logoutButton);
 
     navFrame = new QFrame();
     navFrame->setObjectName("navigationPanel");
-    navFrame->setFixedWidth(180);
+    navFrame->setFixedWidth(208);
     navFrame->setStyleSheet(
         "QFrame {"
         "  background-color: #0f1a33;"
@@ -190,26 +190,18 @@ void MainWindow::setupUi() {
     transactionsPage = new TransactionsWindow(backend_, userId_);
     budgetsPage = new BudgetsWindow(backend_, userId_);
     profilePage = new ProfileWindow(backend_, userId_);
-    aiInsightsPage = new AIInsightsWindow(backend_, userId_);
     savingsPage = new SavingsWindow(backend_, userId_);
-    investmentsPage = new InvestmentsWindow(backend_, userId_);
     goalsPage = new GoalsWindow(backend_, userId_);
-    reportsPage = new ReportsWindow(backend_, userId_);
     receiptsPage = new ReceiptsWindow(backend_, userId_);
-    categoriesPage = new CategoriesWindow(backend_, userId_);
 
     stack->addWidget(loginPage);
     stack->addWidget(dashboardPage);
     stack->addWidget(transactionsPage);
     stack->addWidget(budgetsPage);
     stack->addWidget(profilePage);
-    stack->addWidget(aiInsightsPage);
     stack->addWidget(savingsPage);
-    stack->addWidget(investmentsPage);
     stack->addWidget(goalsPage);
-    stack->addWidget(reportsPage);
     stack->addWidget(receiptsPage);
-    stack->addWidget(categoriesPage);
 
     auto *rightSide = new QWidget();
     auto *rightLayout = new QVBoxLayout(rightSide);
@@ -245,31 +237,6 @@ void MainWindow::setupUi() {
     auto *topBarSpacer = new QWidget();
     topBarSpacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
-    auto *actionsLayout = new QHBoxLayout();
-    actionsLayout->setSpacing(10);
-
-    auto *fullscreenButton = new QPushButton("⌖");
-    auto *addButton = new QPushButton("＋");
-    auto *themeButton = new QPushButton("☀");
-
-    for (auto *button : {fullscreenButton, addButton, themeButton}) {
-        button->setFixedSize(42, 42);
-        button->setStyleSheet(
-            "QPushButton {"
-            "  background-color: #11192b;"
-            "  border: 1px solid #25304a;"
-            "  border-radius: 12px;"
-            "  color: #ffffff;"
-            "  font-size: 18px;"
-            "}"
-            "QPushButton:hover { background-color: #1a2742; }"
-        );
-    }
-
-    actionsLayout->addWidget(fullscreenButton);
-    actionsLayout->addWidget(addButton);
-    actionsLayout->addWidget(themeButton);
-
     auto *profileLabel = new QLabel("User");
     profileLabel->setObjectName("profileLabel");
     profileLabel->setStyleSheet("color: #ffffff; font-weight: 700; font-size: 13px; margin-left: 18px;");
@@ -283,10 +250,10 @@ void MainWindow::setupUi() {
         "padding: 8px 12px;"
         "font-weight: 700;"
     );
+    profileBadgeLabel = profileBadge;
 
     topBarLayout->addLayout(currentViewLayout);
     topBarLayout->addWidget(topBarSpacer);
-    topBarLayout->addLayout(actionsLayout);
     topBarLayout->addWidget(profileLabel, 0, Qt::AlignVCenter);
     topBarLayout->addWidget(profileBadge, 0, Qt::AlignVCenter);
 
@@ -327,6 +294,7 @@ void MainWindow::connectSignals() {
     connect(dashboardButton, &QPushButton::clicked, this, [this]() {
         pageLabel->setText("Dashboard");
         dashboardPage->refreshData();
+        updateProfileBadge();
         stack->setCurrentWidget(dashboardPage);
     });
 
@@ -348,22 +316,10 @@ void MainWindow::connectSignals() {
         stack->setCurrentWidget(profilePage);
     });
 
-    connect(aiInsightsButton, &QPushButton::clicked, this, [this]() {
-        pageLabel->setText("AI Insights");
-        aiInsightsPage->refreshData();
-        stack->setCurrentWidget(aiInsightsPage);
-    });
-
     connect(savingsButton, &QPushButton::clicked, this, [this]() {
         pageLabel->setText("Savings");
         savingsPage->refreshData();
         stack->setCurrentWidget(savingsPage);
-    });
-
-    connect(investmentsButton, &QPushButton::clicked, this, [this]() {
-        pageLabel->setText("Investments");
-        investmentsPage->refreshData();
-        stack->setCurrentWidget(investmentsPage);
     });
 
     connect(goalsButton, &QPushButton::clicked, this, [this]() {
@@ -372,22 +328,10 @@ void MainWindow::connectSignals() {
         stack->setCurrentWidget(goalsPage);
     });
 
-    connect(reportsButton, &QPushButton::clicked, this, [this]() {
-        pageLabel->setText("Reports");
-        reportsPage->refreshData();
-        stack->setCurrentWidget(reportsPage);
-    });
-
     connect(receiptsButton, &QPushButton::clicked, this, [this]() {
-        pageLabel->setText("Receipts / OCR");
+        pageLabel->setText("Receipt Parser");
         receiptsPage->refreshData();
         stack->setCurrentWidget(receiptsPage);
-    });
-
-    connect(categoriesButton, &QPushButton::clicked, this, [this]() {
-        pageLabel->setText("Categories");
-        categoriesPage->refreshData();
-        stack->setCurrentWidget(categoriesPage);
     });
 
     connect(logoutButton, &QPushButton::clicked, this, [this]() {
@@ -416,22 +360,12 @@ void MainWindow::connectSignals() {
         persistNow();
     });
 
-    connect(investmentsPage, &InvestmentsWindow::dataChanged, this, [this]() {
-        refreshPages();
-        persistNow();
-    });
-
     connect(goalsPage, &GoalsWindow::dataChanged, this, [this]() {
         refreshPages();
         persistNow();
     });
 
     connect(receiptsPage, &ReceiptsWindow::dataChanged, this, [this]() {
-        refreshPages();
-        persistNow();
-    });
-
-    connect(categoriesPage, &CategoriesWindow::dataChanged, this, [this]() {
         refreshPages();
         persistNow();
     });
@@ -442,13 +376,9 @@ void MainWindow::refreshPages() {
     transactionsPage->refreshData();
     budgetsPage->refreshData();
     profilePage->refreshData();
-    aiInsightsPage->refreshData();
     savingsPage->refreshData();
-    investmentsPage->refreshData();
     goalsPage->refreshData();
-    reportsPage->refreshData();
     receiptsPage->refreshData();
-    categoriesPage->refreshData();
 }
 
 void MainWindow::setCurrentUser(const std::string& userId) {
@@ -461,16 +391,11 @@ void MainWindow::setCurrentUser(const std::string& userId) {
     transactionsPage->setUserId(userId_);
     budgetsPage->setUserId(userId_);
     profilePage->setUserId(userId_);
-    aiInsightsPage->setUserId(userId_);
     savingsPage->setUserId(userId_);
-    investmentsPage->setUserId(userId_);
     goalsPage->setUserId(userId_);
-    reportsPage->setUserId(userId_);
     receiptsPage->setUserId(userId_);
-    categoriesPage->setUserId(userId_);
 
     auto *profileLabel = findChild<QLabel*>("profileLabel");
-    auto *profileBadge = findChild<QLabel*>("profileBadge");
 
     if (profileLabel) {
         try {
@@ -481,17 +406,7 @@ void MainWindow::setCurrentUser(const std::string& userId) {
         }
     }
 
-    if (profileBadge) {
-        try {
-            const double balance =
-                backend_.transactions().sumTransactions(userId, finsight::core::models::TransactionType::Income, {})
-                - backend_.transactions().sumTransactions(userId, finsight::core::models::TransactionType::Expense, {});
-
-            profileBadge->setText("EGP " + QString::number(balance, 'f', 0));
-        } catch (...) {
-            profileBadge->setText("EGP 0");
-        }
-    }
+    updateProfileBadge();
 
     refreshPages();
     persistNow();
@@ -513,13 +428,9 @@ void MainWindow::clearCurrentUser() {
     transactionsPage->setUserId(userId_);
     budgetsPage->setUserId(userId_);
     profilePage->setUserId(userId_);
-    aiInsightsPage->setUserId(userId_);
     savingsPage->setUserId(userId_);
-    investmentsPage->setUserId(userId_);
     goalsPage->setUserId(userId_);
-    reportsPage->setUserId(userId_);
     receiptsPage->setUserId(userId_);
-    categoriesPage->setUserId(userId_);
 
     refreshPages();
 }
@@ -531,6 +442,24 @@ finsight::core::models::Date MainWindow::today() {
         currentDate.month(),
         currentDate.day()
     };
+}
+
+void MainWindow::updateProfileBadge() {
+    if (!profileBadgeLabel || userId_.empty()) {
+        if (profileBadgeLabel) {
+            profileBadgeLabel->setText("EGP 0");
+        }
+        return;
+    }
+
+    try {
+        const double income = backend_.transactions().sumTransactions(userId_, finsight::core::models::TransactionType::Income);
+        const double expenses = backend_.transactions().sumTransactions(userId_, finsight::core::models::TransactionType::Expense);
+        const double balance = income - expenses;
+        profileBadgeLabel->setText("EGP " + QString::number(balance, 'f', 0));
+    } catch (...) {
+        profileBadgeLabel->setText("EGP 0");
+    }
 }
 
 void MainWindow::showLoginPage() {

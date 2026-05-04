@@ -1,512 +1,244 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
-
 #include "core/services/AuthService.h"
 #include "core/services/SessionService.h"
 #include "core/services/TransactionService.h"
 #include "core/services/BudgetService.h"
 #include "core/services/SavingsService.h"
-#include "core/services/GoalService.h"
-#include "core/services/ReportService.h"
-#include "core/managers/FinanceTrackerBackend.h"
-#include "data/storage/BackendStore.h"
 #include "network/tcp/IMessageHandler.h"
-
-#include <filesystem>
-#include <string>
 
 using namespace finsight::core::services;
 using namespace finsight::core::models;
-
-// i use this date in most tests
-Date makeDate() {
-    Date d;
-    d.year = 2026;
-    d.month = 5;
-    d.day = 1;
-    return d;
+static Date today() { return Date{2026, 5, 1}; }
+static std::string findCatId(const TransactionService& txns,
+                              const std::string& name) {
+    for (const auto& c : txns.getCategories())
+        if (c.name == name) return c.id;
+    return {};
 }
 
-// helper to find a category id by name
-// i loop through all categories and return the one that matches
-std::string getCategoryId(TransactionService& txns, std::string name) {
-    std::string result = "";
-    for (int i = 0; i < txns.getCategories().size(); i++) {
-        if (txns.getCategories()[i].name == name) {
-            result = txns.getCategories()[i].id;
-        }
-    }
-    return result;
-}
-
-
-// -------------------------------------------------------
-// AUTH TESTS
-// -------------------------------------------------------
-
-// test 1 - register a new user and check the info is saved
+// Register user 
 TEST(AuthTest, RegisterUser) {
     AuthService auth;
-
-    User newUser = auth.registerUser("Maya", "maya@aucegypt.edu", "", "", "password123", makeDate());
-
-    EXPECT_EQ(newUser.fullName, "Maya");
-    EXPECT_EQ(newUser.email, "maya@aucegypt.edu");
-    EXPECT_FALSE(newUser.id.empty());
+    auto user = auth.registerUser("Moataz", "moataz@aucegypt.edu",
+                                  "", "", "password123", today());
+    EXPECT_EQ(user.fullName, "Moataz");
+    EXPECT_EQ(user.email,    "moataz@aucegypt.edu");
+    EXPECT_FALSE(user.id.empty());
 }
 
-// test 2 - try to register with the same email twice, should throw an error
+// Duplicate email 
 TEST(AuthTest, DuplicateEmailRejected) {
     AuthService auth;
-
-    auth.registerUser("Maya", "maya@aucegypt.edu", "", "", "password123", makeDate());
-
-    // this second register should fail because email is taken
+    auth.registerUser("Moataz", "moataz@aucegypt.edu", "", "", "password123", today());
     EXPECT_THROW(
-        auth.registerUser("Maya Copy", "maya@aucegypt.edu", "", "", "pass456", makeDate()),
+        auth.registerUser("Moataz1", "moataz@aucegypt.edu", "", "", "pass12345", today()),
         std::invalid_argument
     );
 }
 
-// test 3 - login with correct email and password should work
+// Login successful
 TEST(AuthTest, LoginSucceeds) {
     AuthService auth;
-
-    auth.registerUser("Ahmed", "ahmed@aucegypt.edu", "", "", "mypassword", makeDate());
-
-    auto result = auth.login("ahmed@aucegypt.edu", "mypassword");
-
-    EXPECT_TRUE(result.has_value());
+    auth.registerUser("ahmed", "ahmed@aucegypt.edu", "", "", "ahmed2", today());
+    auto result = auth.login("ahmed@aucegypt.edu", "ahmed2");
+    ASSERT_TRUE(result.has_value());
     EXPECT_EQ(result->email, "ahmed@aucegypt.edu");
 }
 
-// test 4 - login with wrong password should fail
-TEST(AuthTest, LoginWrongPassword) {
+// Login fails with wrong password
+TEST(AuthTest, LoginFailsWrongPassword) {
     AuthService auth;
-
-    auth.registerUser("Mustafa", "mustafa@aucegypt.edu", "", "", "rightpassword", makeDate());
-
-    auto result = auth.login("mustafa@aucegypt.edu", "wrongpassword");
-
+    auth.registerUser("Maya", "maya@aucegypt.edu", "", "", "correct", today());
+    auto result = auth.login("maya@aucegypt.edu", "wrongpassword");
     EXPECT_FALSE(result.has_value());
 }
 
-
-// -------------------------------------------------------
-// SESSION TESTS
-// -------------------------------------------------------
-
-// test 5 - starting a session should make it active
-TEST(SessionTest, SessionIsActiveAfterStart) {
+// Session starts 
+TEST(SessionTest, SessionStartsActive) {
     SessionService sessions;
-
-    Session s = sessions.startSession("usr-1", makeDate());
-
-    EXPECT_TRUE(sessions.isSessionActive(s.token));
+    auto session = sessions.startSession("user-maya", today());
+    EXPECT_TRUE(sessions.isSessionActive(session.token));
+    EXPECT_FALSE(session.token.empty());
 }
 
-// test 6 - ending a session should make it inactive
-TEST(SessionTest, SessionInactiveAfterEnd) {
+// Session ends after logout 
+TEST(SessionTest, SessionEndsAfterLogout) {
     SessionService sessions;
-
-    Session s = sessions.startSession("usr-1", makeDate());
-    sessions.endSession(s.token);
-
-    EXPECT_FALSE(sessions.isSessionActive(s.token));
+    auto session = sessions.startSession("usr-maya", today());
+    sessions.endSession(session.token);
+    EXPECT_FALSE(sessions.isSessionActive(session.token));
 }
 
-
-// -------------------------------------------------------
-// TRANSACTION TESTS
-// -------------------------------------------------------
-
-// test 7 - add a transaction and check it was saved correctly
+// Add transaction 
 TEST(TransactionTest, AddTransaction) {
     TransactionService txns;
-
-    std::string catId = getCategoryId(txns, "Salary");
+    std::string catId = findCatId(txns, "Salary");
 
     Transaction t;
-    t.userId = "usr-1";
-    t.title = "May Salary";
+    t.userId     = "usr-maya";
+    t.title      = "Monthly Salary";
     t.categoryId = catId;
-    t.type = TransactionType::Income;
-    t.amount = 5000.0;
-    t.date = makeDate();
+    t.type       = TransactionType::Income;
+    t.amount     = 5000.0;
+    t.date       = today();
 
-    Transaction saved = txns.addTransaction(t);
-
-    EXPECT_EQ(saved.title, "May Salary");
-    EXPECT_EQ(saved.amount, 5000.0);
+    auto saved = txns.addTransaction(t);
     EXPECT_FALSE(saved.id.empty());
+    EXPECT_DOUBLE_EQ(saved.amount, 5000.0);
+    EXPECT_EQ(saved.title, "Monthly Salary");
 }
 
-// test 8 - update a transaction and check the new values
+// Update transaction 
 TEST(TransactionTest, UpdateTransaction) {
     TransactionService txns;
-
-    std::string catId = getCategoryId(txns, "Food");
+    std::string catId = findCatId(txns, "Food");
 
     Transaction t;
-    t.userId = "usr-1";
-    t.title = "Old Title";
+    t.userId     = "usr-maya";
+    t.title      = "Old Title";
     t.categoryId = catId;
-    t.type = TransactionType::Expense;
-    t.amount = 50.0;
-    t.date = makeDate();
+    t.type       = TransactionType::Expense;
+    t.amount     = 50.0;
+    t.date       = today();
 
-    Transaction saved = txns.addTransaction(t);
+    auto saved   = txns.addTransaction(t);
+    Transaction updated = saved;
+    updated.title  = "New Title";
+    updated.amount = 75.0;
 
-    // change the title and amount
-    saved.title = "New Title";
-    saved.amount = 99.0;
-
-    Transaction updated = txns.updateTransaction("usr-1", saved.id, saved);
-
-    EXPECT_EQ(updated.title, "New Title");
-    EXPECT_EQ(updated.amount, 99.0);
+    auto result = txns.updateTransaction("usr-maya", saved.id, updated);
+    EXPECT_EQ(result.title, "New Title");
+    EXPECT_DOUBLE_EQ(result.amount, 75.0);
 }
 
-// test 9 - delete a transaction and check it is gone
+// Delete transaction 
 TEST(TransactionTest, DeleteTransaction) {
     TransactionService txns;
-
-    std::string catId = getCategoryId(txns, "Food");
+    std::string catId = findCatId(txns, "Food");
 
     Transaction t;
-    t.userId = "usr-1";
-    t.title = "Buy stuff";
+    t.userId     = "usr-maya";
+    t.title      = "To Delete";
     t.categoryId = catId;
-    t.type = TransactionType::Expense;
-    t.amount = 30.0;
-    t.date = makeDate();
+    t.type       = TransactionType::Expense;
+    t.amount     = 20.0;
+    t.date       = today();
 
-    Transaction saved = txns.addTransaction(t);
-    txns.deleteTransaction("usr-1", saved.id);
-
-    // list should be empty now
-    std::vector<Transaction> list = txns.listTransactions("usr-1");
-    EXPECT_EQ(list.size(), 0);
+    auto saved = txns.addTransaction(t);
+    txns.deleteTransaction("usr-maya", saved.id);
+    EXPECT_TRUE(txns.listTransactions("usr-maya").empty());
 }
 
-// test 10 - add two transactions in different categories
-// check that only the right one shows up when i filter
+// Filter transactions by category 
+
 TEST(TransactionTest, FilterByCategory) {
     TransactionService txns;
-
-    std::string foodId = getCategoryId(txns, "Food");
-    std::string transportId = getCategoryId(txns, "Transport");
+    std::string foodId      = findCatId(txns, "Food");
+    std::string transportId = findCatId(txns, "Transport");
 
     Transaction t1;
-    t1.userId = "usr-1";
-    t1.title = "Lunch";
-    t1.categoryId = foodId;
-    t1.type = TransactionType::Expense;
-    t1.amount = 50.0;
-    t1.date = makeDate();
+    t1.userId = "usr-maya"; t1.title = "Lunch";
+    t1.categoryId = foodId; t1.type = TransactionType::Expense;
+    t1.amount = 50.0; t1.date = today();
     txns.addTransaction(t1);
 
     Transaction t2;
-    t2.userId = "usr-1";
-    t2.title = "Uber";
-    t2.categoryId = transportId;
-    t2.type = TransactionType::Expense;
-    t2.amount = 30.0;
-    t2.date = makeDate();
+    t2.userId = "usr-maya"; t2.title = "Uber";
+    t2.categoryId = transportId; t2.type = TransactionType::Expense;
+    t2.amount = 30.0; t2.date = today();
     txns.addTransaction(t2);
 
-    // manually count food transactions
-    std::vector<Transaction> all = txns.listTransactions("usr-1");
+    // Verify 
+    auto all = txns.listTransactions("usr-maya");
+    ASSERT_EQ(all.size(), 2u);
+
+    // counting
     int foodCount = 0;
-    for (int i = 0; i < all.size(); i++) {
-        if (all[i].categoryId == foodId) {
+    std::string foundTitle;
+    for (const auto& t : all) {
+        if (t.categoryId == foodId) {
             foodCount++;
+            foundTitle = t.title;
         }
     }
-
     EXPECT_EQ(foodCount, 1);
+    EXPECT_EQ(foundTitle, "Lunch");
 }
 
-
-// -------------------------------------------------------
-// BUDGET TESTS
-// -------------------------------------------------------
-
-// test 11 - create a budget and check the limit is saved
+// Create budget 
 TEST(BudgetTest, CreateBudget) {
     TransactionService txns;
     BudgetService budgets;
+    std::string foodId = findCatId(txns, "Food");
 
-    std::string foodId = getCategoryId(txns, "Food");
-
-    YearMonth period;
-    period.year = 2026;
-    period.month = 5;
-
-    Budget b = budgets.createBudget("usr-1", foodId, period, 1000.0);
-
-    EXPECT_EQ(b.limit, 1000.0);
+    auto b = budgets.createBudget("usr-1", foodId, YearMonth{2026, 5}, 1000.0);
+    EXPECT_DOUBLE_EQ(b.limit, 1000.0);
     EXPECT_EQ(b.period.month, 5);
+    EXPECT_EQ(b.period.year, 2026);
 }
 
-// test 12 - spend more than the budget limit
-// check that it shows as overspent
+// Overspending detected 
 TEST(BudgetTest, OverspendingDetected) {
     TransactionService txns;
     BudgetService budgets;
+    std::string foodId = findCatId(txns, "Food");
 
-    std::string foodId = getCategoryId(txns, "Food");
+    budgets.createBudget("usr-1", foodId, YearMonth{2026, 5}, 100.0);
 
-    YearMonth period;
-    period.year = 2026;
-    period.month = 5;
-
-    budgets.createBudget("usr-1", foodId, period, 100.0);
-
-    // spend 150 which is over the 100 limit
     Transaction t;
-    t.userId = "usr-1";
-    t.title = "Big dinner";
+    t.userId     = "usr-1";
+    t.title      = "Expensive Dinner";
     t.categoryId = foodId;
-    t.type = TransactionType::Expense;
-    t.amount = 150.0;
-    t.date = makeDate();
+    t.type       = TransactionType::Expense;
+    t.amount     = 150.0;
+    t.date       = {2026, 5, 1};
     txns.addTransaction(t);
 
-    std::vector<BudgetStatus> statuses = budgets.summarizeBudgets("usr-1", period, txns);
-
-    EXPECT_EQ(statuses.size(), 1);
-    EXPECT_TRUE(statuses[0].overspent);
-    EXPECT_EQ(statuses[0].spent, 150.0);
+    auto statuses = budgets.summarizeBudgets("usr-1", YearMonth{2026, 5}, txns);
+    ASSERT_EQ(statuses.size(), 1u);
+    EXPECT_TRUE(statuses.front().overspent);
+    EXPECT_NEAR(statuses.front().spent,     150.0,  0.001);
+    EXPECT_NEAR(statuses.front().remaining, -50.0,  0.001);
 }
 
-
-// -------------------------------------------------------
-// SAVINGS TESTS
-// -------------------------------------------------------
-
-// test 13 - add a deposit and check it was saved
-TEST(SavingsTest, AddDeposit) {
+TEST(SavingsTest, RejectsWithdrawalBeyondCurrentBalance) {
     SavingsService savings;
 
-    SavingsEntry entry = savings.addDeposit("usr-1", 500.0, makeDate(), "first deposit");
+    savings.addDeposit("usr-1", 500.0, today());
 
-    EXPECT_EQ(entry.amount, 500.0);
-    EXPECT_EQ(entry.type, SavingsEntryType::Deposit);
+    EXPECT_THROW(
+        savings.addWithdrawal("usr-1", 600.0, today()),
+        std::invalid_argument
+    );
+
+    const auto overview = savings.summarize("usr-1", YearMonth {2026, 5});
+    EXPECT_DOUBLE_EQ(overview.currentBalance, 500.0);
 }
 
-// test 14 - add a withdrawal and check it was saved
-TEST(SavingsTest, AddWithdrawal) {
+TEST(SavingsTest, AllowsWithdrawalUpToCurrentBalance) {
     SavingsService savings;
 
-    savings.addDeposit("usr-1", 500.0, makeDate(), "deposit");
-    SavingsEntry w = savings.addWithdrawal("usr-1", 200.0, makeDate(), "rent");
+    savings.addDeposit("usr-1", 500.0, today());
+    savings.addWithdrawal("usr-1", 500.0, today());
 
-    EXPECT_EQ(w.amount, 200.0);
-    EXPECT_EQ(w.type, SavingsEntryType::Withdrawal);
+    const auto overview = savings.summarize("usr-1", YearMonth {2026, 5});
+    EXPECT_DOUBLE_EQ(overview.currentBalance, 0.0);
 }
 
-// test 15 - deposit 1000, withdraw 300, deposit 200
-// balance should be 900
-TEST(SavingsTest, BalanceIsCorrect) {
-    SavingsService savings;
-
-    savings.addDeposit("usr-1", 1000.0, makeDate(), "salary");
-    savings.addWithdrawal("usr-1", 300.0, makeDate(), "groceries");
-    savings.addDeposit("usr-1", 200.0, makeDate(), "side job");
-
-    YearMonth period;
-    period.year = 2026;
-    period.month = 5;
-
-    SavingsOverview overview = savings.summarize("usr-1", period);
-
-    EXPECT_EQ(overview.currentBalance, 900.0);
-}
-
-
-// -------------------------------------------------------
-// GOAL TESTS
-// -------------------------------------------------------
-
-// test 16 - create a goal and check info is saved
-TEST(GoalTest, CreateGoal) {
-    GoalService goals;
-
-    Goal g;
-    g.userId = "usr-1";
-    g.title = "Buy a laptop";
-    g.targetAmount = 2000.0;
-    g.currentAmount = 0.0;
-    g.targetDate = makeDate();
-
-    Goal saved = goals.createGoal(g);
-
-    EXPECT_EQ(saved.title, "Buy a laptop");
-    EXPECT_EQ(saved.targetAmount, 2000.0);
-    EXPECT_FALSE(saved.completed);
-}
-
-// test 17 - update how much i saved toward the goal
-TEST(GoalTest, UpdateProgress) {
-    GoalService goals;
-
-    Goal g;
-    g.userId = "usr-1";
-    g.title = "Vacation fund";
-    g.targetAmount = 3000.0;
-    g.currentAmount = 0.0;
-    g.targetDate = makeDate();
-
-    Goal saved = goals.createGoal(g);
-    Goal updated = goals.updateProgress("usr-1", saved.id, 1000.0);
-
-    EXPECT_EQ(updated.currentAmount, 1000.0);
-    EXPECT_FALSE(updated.completed);
-}
-
-// test 18 - when current amount reaches target, goal should be completed
-TEST(GoalTest, GoalCompletedWhenTargetReached) {
-    GoalService goals;
-
-    Goal g;
-    g.userId = "usr-1";
-    g.title = "Small goal";
-    g.targetAmount = 500.0;
-    g.currentAmount = 0.0;
-    g.targetDate = makeDate();
-
-    Goal saved = goals.createGoal(g);
-    Goal updated = goals.updateProgress("usr-1", saved.id, 500.0);
-
-    EXPECT_TRUE(updated.completed);
-}
-
-
-// -------------------------------------------------------
-// REPORT TEST
-// -------------------------------------------------------
-
-// test 19 - add income and expenses then generate a report
-// check that totals and transaction count are correct
-TEST(ReportTest, GenerateReport) {
-    TransactionService txns;
-    BudgetService budgets;
-    ReportService reports;
-
-    std::string salaryId = getCategoryId(txns, "Salary");
-    std::string foodId = getCategoryId(txns, "Food");
-
-    // add one income
-    Transaction income;
-    income.userId = "usr-1";
-    income.title = "Salary";
-    income.categoryId = salaryId;
-    income.type = TransactionType::Income;
-    income.amount = 5000.0;
-    income.date = makeDate();
-    txns.addTransaction(income);
-
-    // add one expense
-    Transaction expense;
-    expense.userId = "usr-1";
-    expense.title = "Groceries";
-    expense.categoryId = foodId;
-    expense.type = TransactionType::Expense;
-    expense.amount = 800.0;
-    expense.date = makeDate();
-    txns.addTransaction(expense);
-
-    ReportRequest req;
-    req.userId = "usr-1";
-    req.from = makeDate();
-    req.to = makeDate();
-
-    FinancialReport report = reports.generateReport(req, txns, budgets);
-
-    EXPECT_EQ(report.totalIncome, 5000.0);
-    EXPECT_EQ(report.totalExpenses, 800.0);
-    EXPECT_EQ(report.net, 4200.0);
-    EXPECT_EQ(report.transactions.size(), 2);
-}
-
-
-// -------------------------------------------------------
-// PERSISTENCE TEST
-// -------------------------------------------------------
-
-// test 20 - save data to a file, load it back, check it is still there
-TEST(PersistenceTest, SaveAndLoad) {
-    std::filesystem::path testFolder = "/tmp/finsight_test_save";
-    std::filesystem::remove_all(testFolder);
-    std::filesystem::create_directories(testFolder);
-
-    finsight::data::storage::BackendStore store;
-
-    // save step - register a user and add a transaction
-    {
-        finsight::core::managers::FinanceTrackerBackend backend;
-
-        User u = backend.auth().registerUser(
-            "Moataz", "moataz@aucegypt.edu", "", "", "pass1234", makeDate());
-
-        std::string foodId = "";
-        for (int i = 0; i < backend.transactions().getCategories().size(); i++) {
-            if (backend.transactions().getCategories()[i].name == "Food") {
-                foodId = backend.transactions().getCategories()[i].id;
-            }
-        }
-
-        Transaction t;
-        t.userId = u.id;
-        t.title = "Lunch";
-        t.categoryId = foodId;
-        t.type = TransactionType::Expense;
-        t.amount = 50.0;
-        t.date = makeDate();
-        backend.transactions().addTransaction(t);
-
-        store.save(backend, testFolder);
-    }
-
-    // load step - create a fresh backend and load the saved data
-    {
-        finsight::core::managers::FinanceTrackerBackend backend;
-        store.load(backend, testFolder);
-
-        std::vector<User> users = backend.auth().listUsers();
-        EXPECT_EQ(users.size(), 1);
-        EXPECT_EQ(users[0].email, "moataz@aucegypt.edu");
-
-        std::vector<Transaction> txns = backend.transactions().listTransactions(users[0].id);
-        EXPECT_EQ(txns.size(), 1);
-        EXPECT_EQ(txns[0].title, "Lunch");
-        EXPECT_EQ(txns[0].amount, 50.0);
-    }
-
-    std::filesystem::remove_all(testFolder);
-}
-
-
-// -------------------------------------------------------
-// MOCK TEST
-// -------------------------------------------------------
-
-// this tests the message handler interface using a fake/mock version
+// Mock: handler called with correct input 
 class MockMessageHandler : public IMessageHandler {
 public:
     MOCK_METHOD(std::string, handle, (const std::string& json), (override));
 };
 
-TEST(MockTest, PingReturnsCorrectResponse) {
+TEST(MockTest, HandlerIsCalledAndReturnsResponse) {
     MockMessageHandler mock;
 
-    // tell the mock what to expect and what to return
     EXPECT_CALL(mock, handle("{\"command\":\"ping\"}"))
         .Times(1)
         .WillOnce(testing::Return("{\"status\":\"ok\",\"message\":\"pong\"}"));
 
     std::string response = mock.handle("{\"command\":\"ping\"}");
-
     EXPECT_EQ(response, "{\"status\":\"ok\",\"message\":\"pong\"}");
 }

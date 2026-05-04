@@ -1,5 +1,7 @@
 #include "gui/transactions/TransactionDialog.h"
 
+#include "gui/FinSightUi.h"
+
 #include <QVBoxLayout>
 #include <QFormLayout>
 #include <QLineEdit>
@@ -10,19 +12,43 @@
 #include <QDialogButtonBox>
 #include <QMessageBox>
 #include <QDate>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+
+#include <exception>
 
 using namespace finsight::core::models;
 
-TransactionDialog::TransactionDialog(QWidget *parent) : QDialog(parent) {
+TransactionDialog::TransactionDialog(finsight::core::managers::FinanceTrackerBackend& backend,
+                                     const std::string& userId,
+                                     QWidget *parent)
+    : QDialog(parent),
+      backend_(backend),
+      userId_(userId) {
     setupUi();
 }
 
 void TransactionDialog::setupUi() {
     setWindowTitle("Add Transaction");
-    resize(400, 300);
+    resize(520, 560);
+    setStyleSheet(finsight::gui::ui::dialogStyle(QStringLiteral("TransactionDialog")));
 
     auto *mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(24, 22, 24, 20);
+    mainLayout->setSpacing(16);
+
+    auto *titleLabel = new QLabel(QStringLiteral("Transaction details"));
+    titleLabel->setStyleSheet(finsight::gui::ui::cardTitleStyle());
+    auto *subtitleLabel = new QLabel(QStringLiteral("Add the transaction details, or create a matching category before saving."));
+    subtitleLabel->setWordWrap(true);
+    subtitleLabel->setStyleSheet(finsight::gui::ui::mutedTextStyle());
+    mainLayout->addWidget(titleLabel);
+    mainLayout->addWidget(subtitleLabel);
+
     auto *formLayout = new QFormLayout();
+    formLayout->setHorizontalSpacing(14);
+    formLayout->setVerticalSpacing(12);
 
     titleEdit = new QLineEdit();
     merchantEdit = new QLineEdit();
@@ -31,6 +57,12 @@ void TransactionDialog::setupUi() {
     typeCombo->addItems({"Income", "Expense"});
 
     categoryCombo = new QComboBox();
+    addCategoryButton = new QPushButton("Add category");
+    addCategoryButton->setStyleSheet(finsight::gui::ui::secondaryButtonStyle());
+    auto *categoryRow = new QHBoxLayout();
+    categoryRow->setContentsMargins(0, 0, 0, 0);
+    categoryRow->addWidget(categoryCombo, 1);
+    categoryRow->addWidget(addCategoryButton);
 
     dateEdit = new QDateEdit();
     dateEdit->setCalendarPopup(true);
@@ -47,7 +79,7 @@ void TransactionDialog::setupUi() {
     formLayout->addRow("Title:", titleEdit);
     formLayout->addRow("Merchant:", merchantEdit);
     formLayout->addRow("Type:", typeCombo);
-    formLayout->addRow("Category:", categoryCombo);
+    formLayout->addRow("Category:", categoryRow);
     formLayout->addRow("Date:", dateEdit);
     formLayout->addRow("Amount:", amountSpin);
     formLayout->addRow("Description:", descriptionEdit);
@@ -55,11 +87,15 @@ void TransactionDialog::setupUi() {
     mainLayout->addLayout(formLayout);
 
     auto *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    buttonBox->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Save"));
+    buttonBox->button(QDialogButtonBox::Ok)->setStyleSheet(finsight::gui::ui::primaryButtonStyle());
+    buttonBox->button(QDialogButtonBox::Cancel)->setStyleSheet(finsight::gui::ui::ghostButtonStyle());
     connect(buttonBox, &QDialogButtonBox::accepted, this, &TransactionDialog::accept);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &TransactionDialog::reject);
     connect(typeCombo, &QComboBox::currentTextChanged, this, [this]() {
         refreshCategoryChoices();
     });
+    connect(addCategoryButton, &QPushButton::clicked, this, &TransactionDialog::addCategory);
 
     mainLayout->addWidget(buttonBox);
 }
@@ -100,6 +136,10 @@ TransactionType TransactionDialog::transactionType() const {
     return type() == "Income" ? TransactionType::Income : TransactionType::Expense;
 }
 
+bool TransactionDialog::categoriesChanged() const {
+    return categoriesChanged_;
+}
+
 void TransactionDialog::setAvailableCategories(const std::vector<Category>& categories) {
     categories_ = categories;
     refreshCategoryChoices();
@@ -124,6 +164,88 @@ void TransactionDialog::setCategory(const QString &value) {
     int index = categoryCombo->findText(value);
     if (index >= 0) {
         categoryCombo->setCurrentIndex(index);
+    }
+}
+
+void TransactionDialog::addCategory() {
+    if (userId_.empty()) {
+        QMessageBox::warning(this, "Category Error", "Please log in before adding categories.");
+        return;
+    }
+
+    QDialog categoryDialog(this);
+    categoryDialog.setWindowTitle(QStringLiteral("Add Category"));
+    categoryDialog.setModal(true);
+    categoryDialog.resize(420, 240);
+    categoryDialog.setStyleSheet(finsight::gui::ui::dialogStyle(QStringLiteral("QDialog")));
+
+    auto *layout = new QVBoxLayout(&categoryDialog);
+    layout->setContentsMargins(22, 20, 22, 18);
+    layout->setSpacing(14);
+
+    auto *header = new QLabel(QStringLiteral("Create category"));
+    header->setStyleSheet(finsight::gui::ui::cardTitleStyle());
+    auto *hint = new QLabel(QStringLiteral("The category will be added for the selected transaction type."));
+    hint->setWordWrap(true);
+    hint->setStyleSheet(finsight::gui::ui::mutedTextStyle());
+    layout->addWidget(header);
+    layout->addWidget(hint);
+
+    auto *form = new QFormLayout();
+    form->setHorizontalSpacing(12);
+    form->setVerticalSpacing(12);
+
+    auto *nameEdit = new QLineEdit();
+    nameEdit->setPlaceholderText(QStringLiteral("Example: Groceries"));
+    auto *iconEdit = new QLineEdit(transactionType() == TransactionType::Income
+                                       ? QStringLiteral("wallet")
+                                       : QStringLiteral("tag"));
+    iconEdit->setPlaceholderText(QStringLiteral("Example: tag"));
+
+    form->addRow(QStringLiteral("Name"), nameEdit);
+    form->addRow(QStringLiteral("Icon"), iconEdit);
+    layout->addLayout(form);
+
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Add category"));
+    buttons->button(QDialogButtonBox::Ok)->setStyleSheet(finsight::gui::ui::primaryButtonStyle());
+    buttons->button(QDialogButtonBox::Cancel)->setStyleSheet(finsight::gui::ui::ghostButtonStyle());
+    layout->addWidget(buttons);
+
+    connect(buttons, &QDialogButtonBox::accepted, &categoryDialog, [&]() {
+        if (nameEdit->text().trimmed().isEmpty()) {
+            QMessageBox::warning(&categoryDialog, QStringLiteral("Category Error"), QStringLiteral("Category name is required."));
+            return;
+        }
+        if (iconEdit->text().trimmed().isEmpty()) {
+            QMessageBox::warning(&categoryDialog, QStringLiteral("Category Error"), QStringLiteral("Icon name is required."));
+            return;
+        }
+        categoryDialog.accept();
+    });
+    connect(buttons, &QDialogButtonBox::rejected, &categoryDialog, &QDialog::reject);
+
+    if (categoryDialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const QString name = nameEdit->text().trimmed();
+    const QString icon = iconEdit->text().trimmed();
+
+    try {
+        const auto category = backend_.transactions().createCategory(
+            userId_,
+            name.toStdString(),
+            transactionType() == TransactionType::Income ? CategoryKind::Income : CategoryKind::Expense,
+            icon.toStdString(),
+            false);
+        categories_ = backend_.transactions().getCategoriesForUser(userId_);
+        categoriesChanged_ = true;
+        refreshCategoryChoices();
+        setCategoryId(category.id);
+        QMessageBox::information(this, "Category Added", "The new category is ready for this transaction.");
+    } catch (const std::exception& error) {
+        QMessageBox::warning(this, "Category Error", error.what());
     }
 }
 

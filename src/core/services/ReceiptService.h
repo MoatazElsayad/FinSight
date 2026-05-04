@@ -45,7 +45,7 @@ public:
 private:
     // Generates the next receipt id.
     std::string nextReceiptId();
-    // Splits raw OCR text into non-empty lines.
+    // Splits raw receipt text into non-empty lines.
     static std::vector<std::string> splitLines(const std::string& text);
     // Finds the first amount-like value inside receipt text.
     static std::optional<double> firstAmount(const std::vector<std::string>& lines);

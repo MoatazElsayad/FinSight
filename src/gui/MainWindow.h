@@ -21,13 +21,9 @@ class DashboardWindow;
 class TransactionsWindow;
 class BudgetsWindow;
 class ProfileWindow;
-class AIInsightsWindow;
 class LoginDialog;
-class CategoriesWindow;
 class ReceiptsWindow;
-class ReportsWindow;
 class GoalsWindow;
-class InvestmentsWindow;
 class SavingsWindow;
 
 class MainWindow : public QMainWindow {
@@ -55,26 +51,20 @@ private:
     TransactionsWindow *transactionsPage;
     BudgetsWindow *budgetsPage;
     ProfileWindow *profilePage;
-    AIInsightsWindow *aiInsightsPage;
     SavingsWindow *savingsPage;
-    InvestmentsWindow *investmentsPage;
     GoalsWindow *goalsPage;
-    ReportsWindow *reportsPage;
     ReceiptsWindow *receiptsPage;
-    CategoriesWindow *categoriesPage;
 
     QPushButton *dashboardButton;
     QPushButton *transactionsButton;
     QPushButton *budgetsButton;
     QPushButton *profileButton;
-    QPushButton *aiInsightsButton;
     QPushButton *savingsButton;
-    QPushButton *investmentsButton;
     QPushButton *goalsButton;
-    QPushButton *reportsButton;
     QPushButton *receiptsButton;
-    QPushButton *categoriesButton;
     QPushButton *logoutButton;
+
+    QLabel *profileBadgeLabel;
 
     void setupUi();
     void connectSignals();
@@ -83,6 +73,7 @@ private:
     void clearCurrentUser();
     void showMainInterface(const QString& userId);
     void showLoginPage();
+    void updateProfileBadge();
     void persistNow();
     static finsight::core::models::Date today();
 };

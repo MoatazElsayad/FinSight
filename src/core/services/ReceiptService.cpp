@@ -111,7 +111,7 @@ models::ReceiptParseResult ReceiptService::parseReceipt(const std::string& userI
         .merchant = firstMerchant(lines),
         .transactionDate = firstDate(lines),
         .amount = firstAmount(lines),
-        .confidenceNotes = "Heuristic parsing from raw OCR text. Review before saving.",
+        .confidenceNotes = "Heuristic parsing from receipt text. Review before saving.",
         .extractedLines = lines,
     };
 

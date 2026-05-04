@@ -4,6 +4,7 @@
 #include "core/managers/FinanceTrackerBackend.h"
 
 #include <QWidget>
+#include <exception>
 #include <optional>
 
 class QTableWidget;
@@ -11,6 +12,7 @@ class QLineEdit;
 class QComboBox;
 class QDateEdit;
 class QPushButton;
+class QString;
 
 class TransactionsWindow : public QWidget {
     Q_OBJECT
@@ -48,7 +50,9 @@ private:
     void onAddTransaction();
     void onEditTransaction();
     void onDeleteTransaction();
-    std::optional<finsight::core::models::Transaction> selectedTransaction() const;
+    std::optional<finsight::core::models::Transaction> selectedTransaction();
+    bool ensureSignedIn(const QString& actionTitle);
+    void showOperationError(const QString& actionTitle, const std::exception& error);
 };
 
 #endif

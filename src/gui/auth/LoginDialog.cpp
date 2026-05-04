@@ -1,5 +1,6 @@
 #include "gui/auth/LoginDialog.h"
 #include "gui/auth/RegisterDialog.h"
+#include "gui/FinSightUi.h"
 
 #include <QDate>
 #include <QMessageBox>
@@ -36,11 +37,8 @@ bool LoginDialog::wantsRegister() const {
 void LoginDialog::setupUi() {
     // Main layout with gradient background
     setStyleSheet(
-        "QWidget { "
-        "  background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
-        "             stop:0 #0a1428, stop:1 #0f1a33); "
-        "  color: #e5e9f4; "
-        "}"
+        "LoginDialog { background-color: #0b1020; color: #e5e9f4; }"
+        "QWidget { color: #e5e9f4; }"
     );
 
     auto *mainLayout = new QVBoxLayout(this);
@@ -52,6 +50,13 @@ void LoginDialog::setupUi() {
     centeringLayout->addStretch();
 
     auto *contentWidget = new QWidget();
+    contentWidget->setObjectName(QStringLiteral("loginPanel"));
+    contentWidget->setStyleSheet(
+        "QWidget#loginPanel {"
+        "  background-color: #141a27;"
+        "  border: 1px solid #2b3245;"
+        "  border-radius: 18px;"
+        "}");
     auto *contentLayout = new QVBoxLayout(contentWidget);
     contentLayout->setContentsMargins(48, 48, 48, 48);
     contentLayout->setSpacing(32);
@@ -196,45 +201,11 @@ void LoginDialog::setupUi() {
 
     auto *loginButton = new QPushButton("Sign In");
     loginButton->setMinimumHeight(48);
-    loginButton->setStyleSheet(
-        "QPushButton { "
-        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
-        "               stop:0 #5b8cff, stop:1 #4a7ae6); "
-        "  color: #ffffff; "
-        "  border: none; "
-        "  border-radius: 10px; "
-        "  font-size: 16px; "
-        "  font-weight: 700; "
-        "  letter-spacing: 0.5px; "
-        "} "
-        "QPushButton:hover { "
-        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
-        "               stop:0 #6b9cff, stop:1 #5a8af6); "
-        "} "
-        "QPushButton:pressed { "
-        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
-        "               stop:0 #4a7ae6, stop:1 #3a6ad6); "
-        "} "
-    );
+    loginButton->setStyleSheet(finsight::gui::ui::primaryButtonStyle());
 
     auto *registerButton = new QPushButton("Create Account");
     registerButton->setMinimumHeight(48);
-    registerButton->setStyleSheet(
-        "QPushButton { "
-        "  background-color: transparent; "
-        "  color: #5b8cff; "
-        "  border: 2px solid #5b8cff; "
-        "  border-radius: 10px; "
-        "  font-size: 16px; "
-        "  font-weight: 700; "
-        "  letter-spacing: 0.5px; "
-        "} "
-        "QPushButton:hover { "
-        "  background-color: rgba(91, 140, 255, 0.1); "
-        "  border: 2px solid #7ba3ff; "
-        "  color: #7ba3ff; "
-        "} "
-    );
+    registerButton->setStyleSheet(finsight::gui::ui::secondaryButtonStyle());
 
     connect(loginButton, &QPushButton::clicked, this, &LoginDialog::attemptLogin);
 

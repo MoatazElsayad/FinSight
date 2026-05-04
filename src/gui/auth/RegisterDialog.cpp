@@ -1,5 +1,7 @@
 #include "gui/auth/RegisterDialog.h"
 
+#include "gui/FinSightUi.h"
+
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -69,48 +71,23 @@ void RegisterDialog::setupUi() {
     resize(460, 520);
     setModal(true);
 
-    setStyleSheet(
-        "RegisterDialog {"
-        "  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
-        "             stop:0 #0a1428, stop:1 #0f1a33);"
-        "  color: #e5e9f4;"
-        "}"
-        "QLineEdit, QComboBox {"
-        "  background-color: #1a2f5a;"
-        "  border: 1px solid #2a4080;"
-        "  border-radius: 10px;"
-        "  color: #e5e9f4;"
-        "  padding: 10px 14px;"
-        "  font-size: 14px;"
-        "  min-height: 22px;"
-        "}"
-        "QLineEdit:focus, QComboBox:focus {"
-        "  border: 2px solid #5b8cff;"
-        "  background-color: #203050;"
-        "}"
-    );
+    setStyleSheet(finsight::gui::ui::dialogStyle(QStringLiteral("RegisterDialog")));
 
     auto *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(40, 36, 40, 32);
     mainLayout->setSpacing(20);
 
     auto *title = new QLabel(QStringLiteral("Create your account"));
-    title->setStyleSheet(
-        QStringLiteral("font-size: 22px; font-weight: 800; color: #ffffff; letter-spacing: -0.3px;"));
+    title->setStyleSheet(QStringLiteral("font-size: 22px; font-weight: 800; color: #ffffff;"));
     auto *subtitle = new QLabel(
         QStringLiteral("All data is stored locally on this device after you sign up."));
-    subtitle->setStyleSheet(QStringLiteral("font-size: 12px; color: #8fa3bf;"));
+    subtitle->setStyleSheet(finsight::gui::ui::mutedTextStyle());
     subtitle->setWordWrap(true);
     mainLayout->addWidget(title);
     mainLayout->addWidget(subtitle);
 
     auto *card = new QFrame();
-    card->setStyleSheet(
-        "QFrame {"
-        "  background-color: rgba(20, 26, 39, 0.92);"
-        "  border: 1px solid #2b3245;"
-        "  border-radius: 14px;"
-        "}");
+    card->setObjectName(QStringLiteral("finCard"));
     auto *cardLayout = new QVBoxLayout(card);
     cardLayout->setContentsMargins(22, 20, 22, 20);
 
@@ -121,7 +98,7 @@ void RegisterDialog::setupUi() {
 
     auto labelStyle = [](const QString& text) {
         auto *l = new QLabel(text);
-        l->setStyleSheet(QStringLiteral("color: #b0bac9; font-size: 12px; font-weight: 600;"));
+        l->setStyleSheet(finsight::gui::ui::labelStyle());
         return l;
     };
 
@@ -155,17 +132,10 @@ void RegisterDialog::setupUi() {
     auto *createBtn = new QPushButton(QStringLiteral("Create account"));
     createBtn->setDefault(true);
     createBtn->setMinimumHeight(46);
-    createBtn->setStyleSheet(
-        "QPushButton {"
-        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5b8cff, stop:1 #4a7ae6);"
-        "  color: #ffffff; border: none; border-radius: 10px;"
-        "  font-size: 15px; font-weight: 700; padding: 0 28px;"
-        "}"
-        "QPushButton:hover {"
-        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #6b9cff, stop:1 #5a8af6);"
-        "}");
+    createBtn->setStyleSheet(finsight::gui::ui::primaryButtonStyle());
     buttonBox->addButton(createBtn, QDialogButtonBox::AcceptRole);
-    buttonBox->addButton(QDialogButtonBox::Cancel);
+    auto *cancelButton = buttonBox->addButton(QDialogButtonBox::Cancel);
+    cancelButton->setStyleSheet(finsight::gui::ui::ghostButtonStyle());
 
     connect(buttonBox, &QDialogButtonBox::accepted, this, &RegisterDialog::accept);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);

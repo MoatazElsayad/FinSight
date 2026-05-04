@@ -1,5 +1,7 @@
 #include "gui/budgets/BudgetsWindow.h"
 
+#include "gui/FinSightUi.h"
+
 #include <QDate>
 #include <QStringList>
 #include <QVBoxLayout>
@@ -15,7 +17,11 @@
 #include <QFrame>
 #include <QMessageBox>
 #include <QAbstractItemView>
+#include <QProgressBar>
+#include <QBrush>
+#include <QColor>
 
+#include <algorithm>
 #include <exception>
 #include <utility>
 
@@ -68,52 +74,13 @@ void BudgetsWindow::setupUi() {
     mainLayout->setContentsMargins(24, 24, 24, 24);
     mainLayout->setSpacing(20);
 
-    setStyleSheet(
-        "BudgetsWindow, BudgetsWindow > QWidget {"
-        "  background-color: #0b1020;"
-        "  color: #e5e9f4;"
-        "}"
-        "QFrame#finCard {"
-        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1a2135, stop:1 #141a27);"
-        "  border: 1px solid #2b3245;"
-        "  border-radius: 14px;"
-        "}"
-        "QLineEdit, QComboBox, QDoubleSpinBox {"
-        "  background-color: #0f1527;"
-        "  border: 1px solid #2b3245;"
-        "  border-radius: 10px;"
-        "  color: #e5e9f4;"
-        "  padding: 8px 10px;"
-        "  min-height: 22px;"
-        "}"
-        "QTableWidget {"
-        "  background-color: #0f1527;"
-        "  border: 1px solid #2a4080;"
-        "  border-radius: 10px;"
-        "  color: #e5e9f4;"
-        "  gridline-color: #1e2436;"
-        "  selection-background-color: #253355;"
-        "}"
-        "QTableWidget::item { padding: 8px; border-bottom: 1px solid #1e2436; }"
-        "QTableWidget::item:selected { background-color: #253355; }"
-        "QHeaderView::section {"
-        "  background-color: #0f1a33;"
-        "  color: #5b8cff;"
-        "  border: 0;"
-        "  padding: 10px 8px;"
-        "  font-weight: 700;"
-        "  border-bottom: 2px solid #2a4080;"
-        "}"
-        "QScrollBar:vertical { background-color: #0f1527; width: 12px; border-radius: 6px; }"
-        "QScrollBar::handle:vertical { background-color: #2b3245; border-radius: 6px; min-height: 24px; }"
-    );
+    setStyleSheet(finsight::gui::ui::pageStyle(QStringLiteral("BudgetsWindow")));
 
     auto *headerColumn = new QVBoxLayout();
     auto *titleLabel = new QLabel("Budgets");
-    titleLabel->setStyleSheet(
-        "font-size: 32px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px;");
+    titleLabel->setStyleSheet(finsight::gui::ui::titleStyle());
     auto *subtitleLabel = new QLabel("Set monthly limits by category and see spend vs. plan at a glance.");
-    subtitleLabel->setStyleSheet("font-size: 13px; color: #8d97ac;");
+    subtitleLabel->setStyleSheet(finsight::gui::ui::subtitleStyle());
     subtitleLabel->setWordWrap(true);
     headerColumn->addWidget(titleLabel);
     headerColumn->addWidget(subtitleLabel);
@@ -128,10 +95,11 @@ void BudgetsWindow::setupUi() {
         auto *lay = new QVBoxLayout(card);
         lay->setContentsMargins(18, 16, 18, 16);
         auto *cap = new QLabel(caption);
-        cap->setStyleSheet("font-size: 12px; font-weight: 500; color: #9ca6bf; letter-spacing: 0.4px;");
-        auto *val = new QLabel(QStringLiteral("$0.00"));
+        cap->setObjectName("metricCaption");
+        auto *val = new QLabel(finsight::gui::ui::formatMoney(0.0));
+        val->setObjectName("metricValue");
         val->setStyleSheet(
-            QStringLiteral("font-size: 26px; font-weight: 700; color: %1; margin-top: 6px;").arg(accentColor));
+            QStringLiteral("font-size: 24px; font-weight: 800; color: %1; margin-top: 6px;").arg(accentColor));
         lay->addWidget(cap);
         lay->addWidget(val);
         lay->addStretch();
@@ -159,7 +127,7 @@ void BudgetsWindow::setupUi() {
     auto *inputOuter = new QVBoxLayout(inputCard);
     inputOuter->setContentsMargins(20, 18, 20, 18);
     auto *inputTitle = new QLabel(QStringLiteral("Add or edit budget"));
-    inputTitle->setStyleSheet("font-size: 14px; font-weight: 600; color: #e5e9f4;");
+    inputTitle->setStyleSheet(finsight::gui::ui::cardTitleStyle());
     inputOuter->addWidget(inputTitle);
     inputOuter->addSpacing(12);
 
@@ -183,23 +151,14 @@ void BudgetsWindow::setupUi() {
     amountSpin->setSingleStep(50.0);
 
     clearButton = new QPushButton(QStringLiteral("Clear"));
-    clearButton->setStyleSheet(
-        "QPushButton {"
-        "  background-color: #0f1527;"
-        "  color: #aab2c5;"
-        "  border: 1px solid #2b3245;"
-        "  border-radius: 10px;"
-        "  padding: 10px 18px;"
-        "  font-weight: 600;"
-        "}"
-        "QPushButton:hover { background-color: #1a2135; border-color: #3a4155; }");
+    clearButton->setStyleSheet(finsight::gui::ui::ghostButtonStyle());
 
     auto *labMonth = new QLabel(QStringLiteral("Month"));
-    labMonth->setStyleSheet(QStringLiteral("color: #9ca6bf; font-size: 12px; font-weight: 500;"));
+    labMonth->setStyleSheet(finsight::gui::ui::labelStyle());
     auto *labCat = new QLabel(QStringLiteral("Category"));
-    labCat->setStyleSheet(QStringLiteral("color: #9ca6bf; font-size: 12px; font-weight: 500;"));
+    labCat->setStyleSheet(finsight::gui::ui::labelStyle());
     auto *labAmt = new QLabel(QStringLiteral("Budget amount"));
-    labAmt->setStyleSheet(QStringLiteral("color: #9ca6bf; font-size: 12px; font-weight: 500;"));
+    labAmt->setStyleSheet(finsight::gui::ui::labelStyle());
 
     inputLayout->addWidget(labMonth, 0, 0);
     inputLayout->addWidget(monthCombo, 0, 1);
@@ -217,20 +176,15 @@ void BudgetsWindow::setupUi() {
     auto *tableLay = new QVBoxLayout(tableCard);
     tableLay->setContentsMargins(16, 16, 16, 16);
     auto *tableTitle = new QLabel(QStringLiteral("Your budgets"));
-    tableTitle->setStyleSheet("font-size: 14px; font-weight: 600; color: #e5e9f4;");
+    tableTitle->setStyleSheet(finsight::gui::ui::cardTitleStyle());
     tableLay->addWidget(tableTitle);
     tableLay->addSpacing(8);
 
     budgetsTable = new QTableWidget();
-    budgetsTable->setColumnCount(5);
+    budgetsTable->setColumnCount(6);
     budgetsTable->setHorizontalHeaderLabels({QStringLiteral("Month"), QStringLiteral("Category"),
-        QStringLiteral("Budgeted"), QStringLiteral("Spent"), QStringLiteral("Remaining")});
-    budgetsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-    budgetsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    budgetsTable->setSelectionMode(QAbstractItemView::SingleSelection);
-    budgetsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    budgetsTable->setShowGrid(false);
-    budgetsTable->verticalHeader()->setVisible(false);
+        QStringLiteral("Budgeted"), QStringLiteral("Spent"), QStringLiteral("Remaining"), QStringLiteral("Progress")});
+    finsight::gui::ui::prepareTable(budgetsTable);
 
     tableLay->addWidget(budgetsTable, 1);
     mainLayout->addWidget(tableCard, 1);
@@ -240,29 +194,9 @@ void BudgetsWindow::setupUi() {
     editButton = new QPushButton(QStringLiteral("Save changes"));
     deleteButton = new QPushButton(QStringLiteral("Delete"));
 
-    addButton->setStyleSheet(
-        "QPushButton {"
-        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5b8cff, stop:1 #4a7ae6);"
-        "  color: #ffffff; border: none; border-radius: 10px;"
-        "  padding: 10px 22px; font-weight: 600; font-size: 13px;"
-        "}"
-        "QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #6b9cff, stop:1 #5a8af6); }");
-    editButton->setStyleSheet(
-        "QPushButton {"
-        "  background-color: #0f1527; color: #e5e9f4;"
-        "  border: 1px solid #3a5490; border-radius: 10px;"
-        "  padding: 10px 22px; font-weight: 600; font-size: 13px;"
-        "}"
-        "QPushButton:hover { background-color: #1a2742; }"
-        "QPushButton:disabled { color: #5c6578; border-color: #2b3245; }");
-    deleteButton->setStyleSheet(
-        "QPushButton {"
-        "  background-color: #2a1a24; color: #ff9db0;"
-        "  border: 1px solid #5a3040; border-radius: 10px;"
-        "  padding: 10px 22px; font-weight: 600; font-size: 13px;"
-        "}"
-        "QPushButton:hover { background-color: #3a222e; }"
-        "QPushButton:disabled { color: #6b4a55; border-color: #2b3245; }");
+    addButton->setStyleSheet(finsight::gui::ui::primaryButtonStyle());
+    editButton->setStyleSheet(finsight::gui::ui::secondaryButtonStyle());
+    deleteButton->setStyleSheet(finsight::gui::ui::dangerButtonStyle());
 
     editButton->setEnabled(false);
     deleteButton->setEnabled(false);
@@ -330,9 +264,41 @@ void BudgetsWindow::addBudgetRow(const QString &month,
     auto *categoryItem = new QTableWidgetItem(category);
     categoryItem->setData(Qt::UserRole, categoryId);
     budgetsTable->setItem(row, 1, categoryItem);
-    budgetsTable->setItem(row, 2, new QTableWidgetItem(QString::number(budgeted, 'f', 2)));
-    budgetsTable->setItem(row, 3, new QTableWidgetItem(QString::number(spent, 'f', 2)));
-    budgetsTable->setItem(row, 4, new QTableWidgetItem(QString::number(remaining, 'f', 2)));
+
+    auto *budgetedItem = new QTableWidgetItem(finsight::gui::ui::formatMoney(budgeted));
+    budgetedItem->setData(Qt::UserRole, budgeted);
+    budgetsTable->setItem(row, 2, budgetedItem);
+
+    auto *spentItem = new QTableWidgetItem(finsight::gui::ui::formatMoney(spent));
+    spentItem->setData(Qt::UserRole, spent);
+    budgetsTable->setItem(row, 3, spentItem);
+
+    auto *remainingItem = new QTableWidgetItem(finsight::gui::ui::formatMoney(remaining));
+    remainingItem->setData(Qt::UserRole, remaining);
+    if (remaining < 0.0) {
+        remainingItem->setForeground(QBrush(QColor(finsight::gui::ui::dangerColor())));
+    } else if (remaining <= budgeted * 0.1) {
+        remainingItem->setForeground(QBrush(QColor(finsight::gui::ui::warningColor())));
+    } else {
+        remainingItem->setForeground(QBrush(QColor(finsight::gui::ui::successColor())));
+    }
+    budgetsTable->setItem(row, 4, remainingItem);
+
+    auto *progress = new QProgressBar();
+    progress->setRange(0, 100);
+    const int percent = budgeted <= 0.0 ? 0 : static_cast<int>(std::min(100.0, (spent / budgeted) * 100.0));
+    progress->setValue(percent);
+    progress->setFormat(QStringLiteral("%1%").arg(QString::number(spent / std::max(1.0, budgeted) * 100.0, 'f', 0)));
+    if (remaining < 0.0) {
+        progress->setStyleSheet(QStringLiteral(
+            "QProgressBar::chunk { background-color: %1; border-radius: 8px; }")
+            .arg(finsight::gui::ui::dangerColor()));
+    } else if (remaining <= budgeted * 0.1) {
+        progress->setStyleSheet(QStringLiteral(
+            "QProgressBar::chunk { background-color: %1; border-radius: 8px; }")
+            .arg(finsight::gui::ui::warningColor()));
+    }
+    budgetsTable->setCellWidget(row, 5, progress);
 }
 
 void BudgetsWindow::refreshSummary() {
@@ -341,19 +307,19 @@ void BudgetsWindow::refreshSummary() {
     double totalRemaining = 0.0;
 
     for (int row = 0; row < budgetsTable->rowCount(); ++row) {
-        totalBudget += budgetsTable->item(row, 2)->text().toDouble();
-        totalSpent += budgetsTable->item(row, 3)->text().toDouble();
-        totalRemaining += budgetsTable->item(row, 4)->text().toDouble();
+        totalBudget += budgetsTable->item(row, 2)->data(Qt::UserRole).toDouble();
+        totalSpent += budgetsTable->item(row, 3)->data(Qt::UserRole).toDouble();
+        totalRemaining += budgetsTable->item(row, 4)->data(Qt::UserRole).toDouble();
     }
 
     if (totalBudgetValue != nullptr) {
-        totalBudgetValue->setText(QStringLiteral("$") + QString::number(totalBudget, 'f', 2));
+        totalBudgetValue->setText(finsight::gui::ui::formatMoney(totalBudget));
     }
     if (totalSpentValue != nullptr) {
-        totalSpentValue->setText(QStringLiteral("$") + QString::number(totalSpent, 'f', 2));
+        totalSpentValue->setText(finsight::gui::ui::formatMoney(totalSpent));
     }
     if (totalRemainingValue != nullptr) {
-        totalRemainingValue->setText(QStringLiteral("$") + QString::number(totalRemaining, 'f', 2));
+        totalRemainingValue->setText(finsight::gui::ui::formatMoney(totalRemaining));
     }
 }
 
@@ -466,7 +432,7 @@ void BudgetsWindow::onTableSelectionChanged() {
     if (categoryIndex >= 0) {
         categoryCombo->setCurrentIndex(categoryIndex);
     }
-    amountSpin->setValue(budgetsTable->item(currentRow, 2)->text().toDouble());
+    amountSpin->setValue(budgetsTable->item(currentRow, 2)->data(Qt::UserRole).toDouble());
 }
 
 std::optional<Budget> BudgetsWindow::selectedBudget() const {
