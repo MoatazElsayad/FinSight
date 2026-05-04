@@ -7,3 +7,4 @@ build_test/
 *.pro.user
 .vscode/
 .env
+build-debug/

@@ -3,8 +3,13 @@
 #include "../models/AI.h"
 
 #include <functional>
+#include <string>
 
 using namespace std;
+
+namespace finsight::core::models {
+struct FinancialReport;
+}
 
 namespace finsight::core::services {
 
@@ -55,6 +60,9 @@ public:
     models::AIReceiptSuggestion suggestReceiptTransaction(const string& rawText,
                                                           const string& merchantHint = "") const;
 
+    // Next-step bullets for a text export (LFM with 10s HTTP timeout; heuristic fallback if AI unavailable).
+    string generateFinancialReportRecommendations(const models::FinancialReport& report) const;
+
 private:
     // Tries the configured model list until one returns a usable response.
     models::AIChatResponse runChatCompletion(const vector<models::AIMessage>& messages,
@@ -79,6 +87,9 @@ private:
                                            const SavingsService& savingsService);
     // Picks a simple fallback merchant/category hint from receipt text.
     static string fallbackReceiptCategoryName(const string& rawText);
+    static string buildFinancialReportContext(const models::FinancialReport& report);
+    static string heuristicReportRecommendations(const models::FinancialReport& report);
+    static string normalizeReportRecommendationLines(const string& raw);
 
     models::AIProviderConfig config_;
 };

@@ -578,7 +578,9 @@ void DashboardWindow::exportTextReport() {
             QMessageBox::warning(this, QStringLiteral("Export Report"), QStringLiteral("Could not write the selected file."));
             return;
         }
-        file.write(report.exportedText.c_str());
+        std::string fileBody = report.exportedText;
+        fileBody += backend_.ai().generateFinancialReportRecommendations(report);
+        file.write(fileBody.c_str());
         file.close();
 
         QMessageBox::information(this,

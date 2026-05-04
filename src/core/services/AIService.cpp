@@ -5,6 +5,7 @@
 #include "GoalService.h"
 #include "SavingsService.h"
 #include "TransactionService.h"
+#include "../models/Report.h"
 #include "../../network/ai/ChatCompletionClient.h"
 
 #include <algorithm>
@@ -17,6 +18,14 @@
 using namespace std;
 
 namespace finsight::core::services {
+
+namespace {
+
+bool openRouterKeyLooksConfigured(const string& apiKey) {
+    return !apiKey.empty() && apiKey.find("sk-or-v1") == 0;
+}
+
+}  // namespace
 
 // Builds the AI service with default settings.
 AIService::AIService() = default;
@@ -290,6 +299,138 @@ string AIService::fallbackReceiptCategoryName(const string& rawText) {
         return "Transport";
     }
     return "Receipt Merchant";
+}
+
+// Builds a compact summary of an already-generated FinancialReport for the model prompt.
+string AIService::buildFinancialReportContext(const models::FinancialReport& report) {
+    ostringstream context;
+    context << "Period: " << report.request.from.toString() << " .. " << report.request.to.toString() << "\n";
+    context << "Income: " << report.totalIncome << " EGP\n";
+    context << "Expenses: " << report.totalExpenses << " EGP\n";
+    context << "Net: " << report.net << " EGP\n";
+    context << "Transactions in range: " << report.transactions.size() << "\n";
+    context << "Expense categories:\n";
+    for (const auto& line : report.categoryExpenses) {
+        context << "- " << line.categoryName << ": " << line.amount << " EGP\n";
+    }
+    context << "Budget status lines: " << report.impactedBudgets.size() << "\n";
+    for (const auto& st : report.impactedBudgets) {
+        context << "- spent=" << st.spent << ", limit=" << st.budget.limit
+                << ", remaining=" << st.remaining << ", overspent=" << (st.overspent ? "yes" : "no") << "\n";
+    }
+    context << "Sample transactions (up to 20):\n";
+    const size_t cap = min<size_t>(report.transactions.size(), 20);
+    for (size_t i = 0; i < cap; ++i) {
+        const auto& t = report.transactions[i];
+        context << "- " << t.date.toString() << " | " << (t.type == models::TransactionType::Income ? "in" : "out")
+                << " | " << t.title << " | " << t.amount << " EGP\n";
+    }
+    return context.str();
+}
+
+// Rule-based bullets when AI is unavailable or times out.
+string AIService::heuristicReportRecommendations(const models::FinancialReport& report) {
+    ostringstream text;
+    if (report.net < 0.0) {
+        text << "- Reduce flexible spending until the net balance returns above zero.\n";
+    } else if (report.net > 0.0 && report.totalIncome > 0.0) {
+        text << "- Keep directing part of your surplus toward savings or goal progress.\n";
+    } else if (report.totalIncome <= 0.0 && report.totalExpenses > 0.0) {
+        text << "- Record expected income for this period so planning reflects reality.\n";
+    }
+    if (!report.categoryExpenses.empty()) {
+        text << "- Review " << report.categoryExpenses.front().categoryName
+             << " first; it had the largest expense share this period.\n";
+    }
+    bool anyOverspent = false;
+    for (const auto& st : report.impactedBudgets) {
+        if (st.overspent) {
+            anyOverspent = true;
+            break;
+        }
+    }
+    if (anyOverspent) {
+        text << "- Revisit overspent budgets and adjust limits only when the new limit reflects a real plan.\n";
+    } else if (!report.impactedBudgets.empty()) {
+        text << "- Budgets are on track; maintain the habits that kept spending within limits.\n";
+    }
+    if (report.transactions.empty()) {
+        text << "- Add transactions for this period so future reports capture real activity.\n";
+    }
+    const string s = text.str();
+    return s.empty() ? string("- Review your categories and budgets for the next period.\n") : s;
+}
+
+string AIService::normalizeReportRecommendationLines(const string& raw) {
+    ostringstream out;
+    istringstream stream(raw);
+    string line;
+    int count = 0;
+    constexpr int kMaxLines = 8;
+    while (getline(stream, line) && count < kMaxLines) {
+        while (!line.empty() && (line.front() == ' ' || line.front() == '\t')) {
+            line.erase(line.begin());
+        }
+        if (line.empty()) {
+            continue;
+        }
+        if (line.front() != '-') {
+            line.insert(line.begin(), '-');
+            line.insert(line.begin() + 1, ' ');
+        } else if (line.size() < 2 || line[1] != ' ') {
+            line.insert(line.begin() + 1, ' ');
+        }
+        out << line << '\n';
+        ++count;
+    }
+    return out.str();
+}
+
+string AIService::generateFinancialReportRecommendations(const models::FinancialReport& report) const {
+    ostringstream section;
+    section << "\nRecommended Next Steps\n";
+    section << "----------------------\n";
+
+    if (!openRouterKeyLooksConfigured(config_.apiKey)) {
+        section << "(AI not configured; using built-in advice.)\n";
+        section << heuristicReportRecommendations(report);
+        return section.str();
+    }
+
+    network::ai::ChatCompletionClient client;
+    const string context = buildFinancialReportContext(report);
+    const auto response = client.complete(
+        config_,
+        models::AIChatRequest {
+            .model = "liquid/lfm-2.5-1.2b-instruct:free",
+            .messages = {
+                {"system",
+                 "You are a concise personal finance coach. Reply with 4 to 6 lines only. "
+                 "Each line must start with exactly '- '. Mention amounts in EGP when useful. "
+                 "Do not add headings or text before the first bullet."},
+                {"user",
+                 "Here is a FinSight user report summary for one period. Give practical next steps.\n\n" + context},
+            },
+            .temperature = 0.25,
+        },
+        10);
+
+    const bool placeholder = response.content.find("AI placeholder") != string::npos;
+    if (response.success && !response.content.empty() && !placeholder) {
+        const string normalized = normalizeReportRecommendationLines(response.content);
+        if (!normalized.empty()) {
+            section << normalized;
+            if (!response.model.empty()) {
+                section << "\n(Model: " << response.model << ")\n";
+            }
+            return section.str();
+        }
+        section << "(AI reply was empty or unusable; using built-in advice.)\n";
+    } else {
+        section << "(AI did not return usable output within 10 seconds; using built-in advice.)\n";
+    }
+    section << heuristicReportRecommendations(report);
+    return section.str();
 }
 
 }  // namespace finsight::core::services

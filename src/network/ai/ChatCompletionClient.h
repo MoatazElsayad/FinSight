@@ -12,7 +12,8 @@ public:
     ChatCompletionClient();
     
     core::models::AIChatResponse complete(const core::models::AIProviderConfig& config,
-                                          const core::models::AIChatRequest& request) const;
+                                          const core::models::AIChatRequest& request,
+                                          int timeoutSeconds = 45) const;
 
 private:
     string escapeJson(const string& value) const;

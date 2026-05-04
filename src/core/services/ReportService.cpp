@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <iomanip>
+#include <ios>
 #include <map>
 #include <optional>
 #include <sstream>
@@ -112,6 +113,9 @@ models::FinancialReport ReportService::generateReport(const models::ReportReques
     text << std::left << std::setw(22) << "Net balance" << "EGP " << money(report.net) << "\n";
     text << std::left << std::setw(22) << "Savings rate" << money(savingsRate) << "%\n\n";
 
+    // Key Totals uses std::left; reset before zero-padded month values (otherwise month 3 prints as "30").
+    text << std::resetiosflags(std::ios_base::adjustfield) << std::setfill(' ');
+
     text << "Category Breakdown\n";
     text << "------------------\n";
     if (report.categoryExpenses.empty()) {
@@ -127,8 +131,8 @@ models::FinancialReport ReportService::generateReport(const models::ReportReques
     text << "-------------\n";
     if (report.impactedBudgets.empty()) {
         text << "No budgets are configured for " << currentPeriod.year << '-'
-             << std::setw(2) << std::setfill('0') << currentPeriod.month << "\n";
-        text << std::setfill(' ');
+             << std::right << std::setw(2) << std::setfill('0') << currentPeriod.month << "\n";
+        text << std::setfill(' ') << std::left;
     } else {
         for (const auto& status : report.impactedBudgets) {
             const auto& category = transactionService.requireCategory(status.budget.categoryId);
@@ -160,18 +164,6 @@ models::FinancialReport ReportService::generateReport(const models::ReportReques
             text << "\n";
         }
     }
-    text << "\nRecommended Next Steps\n";
-    text << "----------------------\n";
-    if (report.net < 0.0) {
-        text << "- Reduce flexible spending until the net balance returns above zero.\n";
-    } else {
-        text << "- Keep the positive net balance moving toward savings or goal progress.\n";
-    }
-    if (topCategory) {
-        text << "- Review " << topCategory->categoryName
-             << " transactions first because they had the largest expense impact.\n";
-    }
-    text << "- Revisit overspent budgets and adjust limits only when the new limit reflects a real plan.\n";
 
     report.exportedText = text.str();
 

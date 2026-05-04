@@ -8,7 +8,7 @@ using namespace std;
 namespace finsight::network::ai {
 
 ChatCompletionClient::ChatCompletionClient() {
-    httpClient_.setTimeout(45);
+    httpClient_.setTimeout(20);
 }
 
 bool hasRealKey(const string& apiKey) {
@@ -16,7 +16,8 @@ bool hasRealKey(const string& apiKey) {
 }
 
 core::models::AIChatResponse ChatCompletionClient::complete(const core::models::AIProviderConfig& config,
-                                                            const core::models::AIChatRequest& request) const {
+                                                            const core::models::AIChatRequest& request,
+                                                            int timeoutSeconds) const {
     core::models::AIChatResponse response {.model = request.model.empty() ? config.model : request.model};
     
     if (!hasRealKey(config.apiKey)) {
@@ -34,13 +35,14 @@ core::models::AIChatResponse ChatCompletionClient::complete(const core::models::
     httpRequest.method = finsight::network::protocol::HttpMethod::Post;
     httpRequest.url = config.apiUrl;
     httpRequest.body = payload;
-    httpRequest.timeoutSeconds = 45;
+    const int effectiveTimeout = timeoutSeconds > 0 ? timeoutSeconds : 45;
+    httpRequest.timeoutSeconds = effectiveTimeout;
     httpRequest.headers.insert(std::make_pair("Authorization", "Bearer " + config.apiKey));
     httpRequest.headers.insert(std::make_pair("Content-Type", "application/json"));
     httpRequest.headers.insert(std::make_pair("HTTP-Referer", config.appUrl));
     httpRequest.headers.insert(std::make_pair("X-Title", config.appName));
     
-    httpClient_.setTimeout(45);
+    httpClient_.setTimeout(effectiveTimeout);
     auto result = httpClient_.sendRequest(httpRequest);
     
     response.rawResponse = result.response.body;
