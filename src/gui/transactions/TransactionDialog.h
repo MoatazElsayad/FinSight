@@ -1,6 +1,7 @@
 #ifndef TRANSACTIONDIALOG_H
 #define TRANSACTIONDIALOG_H
 
+#include "core/managers/FinanceTrackerBackend.h"
 #include "core/models/Category.h"
 #include "core/models/Transaction.h"
 
@@ -13,12 +14,15 @@ class QComboBox;
 class QDateEdit;
 class QDoubleSpinBox;
 class QTextEdit;
+class QPushButton;
 
 class TransactionDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit TransactionDialog(QWidget *parent = nullptr);
+    explicit TransactionDialog(finsight::core::managers::FinanceTrackerBackend& backend,
+                               const std::string& userId,
+                               QWidget *parent = nullptr);
 
     QString title() const;
     QString type() const;
@@ -29,6 +33,7 @@ public:
     QString description() const;
     std::string categoryId() const;
     finsight::core::models::TransactionType transactionType() const;
+    bool categoriesChanged() const;
 
     void setAvailableCategories(const std::vector<finsight::core::models::Category>& categories);
 
@@ -46,17 +51,22 @@ protected:
     void accept() override;
 
 private:
+    finsight::core::managers::FinanceTrackerBackend& backend_;
+    std::string userId_;
     QLineEdit *titleEdit;
     QLineEdit *merchantEdit;
     QComboBox *typeCombo;
     QComboBox *categoryCombo;
+    QPushButton *addCategoryButton;
     QDateEdit *dateEdit;
     QDoubleSpinBox *amountSpin;
     QTextEdit *descriptionEdit;
     std::vector<finsight::core::models::Category> categories_;
+    bool categoriesChanged_ {false};
 
     void setupUi();
     void refreshCategoryChoices();
+    void addCategory();
 };
 
 #endif

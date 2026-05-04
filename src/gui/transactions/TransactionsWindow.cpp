@@ -1,5 +1,6 @@
 #include "gui/transactions/TransactionsWindow.h"
 #include "gui/transactions/TransactionDialog.h"
+#include "gui/FinSightUi.h"
 
 #include <QDate>
 #include <QStringList>
@@ -44,53 +45,14 @@ void TransactionsWindow::setupUi() {
     mainLayout->setContentsMargins(24, 24, 24, 24);
     mainLayout->setSpacing(20);
 
-    setStyleSheet(
-        "TransactionsWindow, TransactionsWindow > QWidget {"
-        "  background-color: #0b1020;"
-        "  color: #e5e9f4;"
-        "}"
-        "QFrame#finCard {"
-        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1a2135, stop:1 #141a27);"
-        "  border: 1px solid #2b3245;"
-        "  border-radius: 14px;"
-        "}"
-        "QLineEdit, QComboBox, QDateEdit {"
-        "  background-color: #0f1527;"
-        "  border: 1px solid #2b3245;"
-        "  border-radius: 10px;"
-        "  color: #e5e9f4;"
-        "  padding: 8px 10px;"
-        "  min-height: 22px;"
-        "}"
-        "QTableWidget {"
-        "  background-color: #0f1527;"
-        "  border: 1px solid #2a4080;"
-        "  border-radius: 10px;"
-        "  color: #e5e9f4;"
-        "  gridline-color: #1e2436;"
-        "  selection-background-color: #253355;"
-        "}"
-        "QTableWidget::item { padding: 8px; border-bottom: 1px solid #1e2436; }"
-        "QTableWidget::item:selected { background-color: #253355; }"
-        "QHeaderView::section {"
-        "  background-color: #0f1a33;"
-        "  color: #5b8cff;"
-        "  border: 0;"
-        "  padding: 10px 8px;"
-        "  font-weight: 700;"
-        "  border-bottom: 2px solid #2a4080;"
-        "}"
-        "QScrollBar:vertical { background-color: #0f1527; width: 12px; border-radius: 6px; }"
-        "QScrollBar::handle:vertical { background-color: #2b3245; border-radius: 6px; min-height: 24px; }"
-    );
+    setStyleSheet(finsight::gui::ui::pageStyle(QStringLiteral("TransactionsWindow")));
 
     auto *headerColumn = new QVBoxLayout();
     auto *titleLabel = new QLabel(QStringLiteral("Transactions"));
-    titleLabel->setStyleSheet(
-        "font-size: 32px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px;");
+    titleLabel->setStyleSheet(finsight::gui::ui::titleStyle());
     auto *subtitleLabel = new QLabel(
         QStringLiteral("Search and filter your activity, then add or adjust entries in one place."));
-    subtitleLabel->setStyleSheet("font-size: 13px; color: #8d97ac;");
+    subtitleLabel->setStyleSheet(finsight::gui::ui::subtitleStyle());
     subtitleLabel->setWordWrap(true);
     headerColumn->addWidget(titleLabel);
     headerColumn->addWidget(subtitleLabel);
@@ -101,7 +63,7 @@ void TransactionsWindow::setupUi() {
     auto *filtersOuter = new QVBoxLayout(filtersCard);
     filtersOuter->setContentsMargins(20, 18, 20, 18);
     auto *filtersTitle = new QLabel(QStringLiteral("Filters"));
-    filtersTitle->setStyleSheet("font-size: 14px; font-weight: 600; color: #e5e9f4;");
+    filtersTitle->setStyleSheet(finsight::gui::ui::cardTitleStyle());
     filtersOuter->addWidget(filtersTitle);
     filtersOuter->addSpacing(12);
 
@@ -111,7 +73,7 @@ void TransactionsWindow::setupUi() {
 
     auto smallLab = [](const QString& t) {
         auto *l = new QLabel(t);
-        l->setStyleSheet(QStringLiteral("color: #9ca6bf; font-size: 12px; font-weight: 500;"));
+        l->setStyleSheet(finsight::gui::ui::labelStyle());
         return l;
     };
 
@@ -135,16 +97,7 @@ void TransactionsWindow::setupUi() {
     toDateEdit->setDate(QDate::currentDate());
 
     clearFiltersButton = new QPushButton(QStringLiteral("Reset filters"));
-    clearFiltersButton->setStyleSheet(
-        "QPushButton {"
-        "  background-color: #0f1527;"
-        "  color: #aab2c5;"
-        "  border: 1px solid #2b3245;"
-        "  border-radius: 10px;"
-        "  padding: 10px 18px;"
-        "  font-weight: 600;"
-        "}"
-        "QPushButton:hover { background-color: #1a2135; border-color: #3a4155; }");
+    clearFiltersButton->setStyleSheet(finsight::gui::ui::ghostButtonStyle());
 
     filtersLayout->addWidget(smallLab(QStringLiteral("Search")), 0, 0);
     filtersLayout->addWidget(searchEdit, 0, 1, 1, 2);
@@ -167,7 +120,7 @@ void TransactionsWindow::setupUi() {
     auto *tableOuter = new QVBoxLayout(tableCard);
     tableOuter->setContentsMargins(16, 16, 16, 16);
     auto *tableTitle = new QLabel(QStringLiteral("All transactions"));
-    tableTitle->setStyleSheet("font-size: 14px; font-weight: 600; color: #e5e9f4;");
+    tableTitle->setStyleSheet(finsight::gui::ui::cardTitleStyle());
     tableOuter->addWidget(tableTitle);
     tableOuter->addSpacing(8);
 
@@ -176,13 +129,7 @@ void TransactionsWindow::setupUi() {
     transactionsTable->setHorizontalHeaderLabels(
         {QStringLiteral("Date"), QStringLiteral("Title"), QStringLiteral("Type"), QStringLiteral("Category"),
             QStringLiteral("Amount")});
-    transactionsTable->horizontalHeader()->setStretchLastSection(true);
-    transactionsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-    transactionsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    transactionsTable->setSelectionMode(QAbstractItemView::SingleSelection);
-    transactionsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    transactionsTable->setShowGrid(false);
-    transactionsTable->verticalHeader()->setVisible(false);
+    finsight::gui::ui::prepareTable(transactionsTable);
 
     tableOuter->addWidget(transactionsTable, 1);
     mainLayout->addWidget(tableCard, 1);
@@ -192,27 +139,9 @@ void TransactionsWindow::setupUi() {
     editButton = new QPushButton(QStringLiteral("Edit"));
     deleteButton = new QPushButton(QStringLiteral("Delete"));
 
-    addButton->setStyleSheet(
-        "QPushButton {"
-        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5b8cff, stop:1 #4a7ae6);"
-        "  color: #ffffff; border: none; border-radius: 10px;"
-        "  padding: 10px 22px; font-weight: 600; font-size: 13px;"
-        "}"
-        "QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #6b9cff, stop:1 #5a8af6); }");
-    editButton->setStyleSheet(
-        "QPushButton {"
-        "  background-color: #0f1527; color: #e5e9f4;"
-        "  border: 1px solid #3a5490; border-radius: 10px;"
-        "  padding: 10px 22px; font-weight: 600; font-size: 13px;"
-        "}"
-        "QPushButton:hover { background-color: #1a2742; }");
-    deleteButton->setStyleSheet(
-        "QPushButton {"
-        "  background-color: #2a1a24; color: #ff9db0;"
-        "  border: 1px solid #5a3040; border-radius: 10px;"
-        "  padding: 10px 22px; font-weight: 600; font-size: 13px;"
-        "}"
-        "QPushButton:hover { background-color: #3a222e; }");
+    addButton->setStyleSheet(finsight::gui::ui::primaryButtonStyle());
+    editButton->setStyleSheet(finsight::gui::ui::secondaryButtonStyle());
+    deleteButton->setStyleSheet(finsight::gui::ui::dangerButtonStyle());
 
     buttonsLayout->addStretch();
     buttonsLayout->addWidget(addButton);
@@ -285,7 +214,7 @@ void TransactionsWindow::refreshData() {
         auto *categoryItem = new QTableWidgetItem(QString::fromStdString(category.name));
         categoryItem->setData(Qt::UserRole, QString::fromStdString(category.id));
         transactionsTable->setItem(row, 3, categoryItem);
-        auto *amountItem = new QTableWidgetItem(QString::number(transaction.amount, 'f', 2));
+        auto *amountItem = new QTableWidgetItem(finsight::gui::ui::formatMoney(transaction.amount));
         if (transaction.type == TransactionType::Income) {
             amountItem->setForeground(QBrush(QColor(QStringLiteral("#8cf4b8"))));
         } else {
@@ -296,10 +225,15 @@ void TransactionsWindow::refreshData() {
 }
 
 void TransactionsWindow::onAddTransaction() {
-    TransactionDialog dialog(this);
+    TransactionDialog dialog(backend_, userId_, this);
     dialog.setAvailableCategories(backend_.transactions().getCategoriesForUser(userId_));
 
-    if (dialog.exec() == QDialog::Accepted) {
+    const int result = dialog.exec();
+    if (dialog.categoriesChanged()) {
+        populateCategoryFilter();
+    }
+
+    if (result == QDialog::Accepted) {
         const auto transaction = backend_.transactions().addTransaction(Transaction {
             .userId = userId_,
             .title = dialog.title().toStdString(),
@@ -333,6 +267,9 @@ void TransactionsWindow::onAddTransaction() {
         }
         refreshData();
         emit dataChanged();
+    } else if (dialog.categoriesChanged()) {
+        refreshData();
+        emit dataChanged();
     }
 }
 
@@ -343,7 +280,7 @@ void TransactionsWindow::onEditTransaction() {
         return;
     }
 
-    TransactionDialog dialog(this);
+    TransactionDialog dialog(backend_, userId_, this);
     dialog.setDialogTitle("Edit Transaction");
     dialog.setAvailableCategories(backend_.transactions().getCategoriesForUser(userId_));
     dialog.setDate(QString::fromStdString(transaction->date.toString()));
@@ -354,7 +291,12 @@ void TransactionsWindow::onEditTransaction() {
     dialog.setDescription(QString::fromStdString(transaction->description));
     dialog.setMerchant(QString::fromStdString(transaction->merchant));
 
-    if (dialog.exec() == QDialog::Accepted) {
+    const int result = dialog.exec();
+    if (dialog.categoriesChanged()) {
+        populateCategoryFilter();
+    }
+
+    if (result == QDialog::Accepted) {
         backend_.transactions().updateTransaction(
             userId_,
             transaction->id,
@@ -369,6 +311,9 @@ void TransactionsWindow::onEditTransaction() {
                 .date = Date::fromString(dialog.date().toStdString()),
                 .merchant = dialog.merchant().toStdString(),
             });
+        refreshData();
+        emit dataChanged();
+    } else if (dialog.categoriesChanged()) {
         refreshData();
         emit dataChanged();
     }

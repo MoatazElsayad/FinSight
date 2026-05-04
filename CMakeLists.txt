@@ -86,6 +86,7 @@ add_executable(finsight_gui
 
     src/gui/MainWindow.cpp
     src/gui/MainWindow.h
+    src/gui/FinSightUi.h
 
     src/gui/auth/LoginDialog.cpp
     src/gui/auth/LoginDialog.h
@@ -106,26 +107,14 @@ add_executable(finsight_gui
     src/gui/budgets/BudgetsWindow.cpp
     src/gui/budgets/BudgetsWindow.h
 
-    src/gui/ai/AIInsightsWindow.cpp
-    src/gui/ai/AIInsightsWindow.h
-
     src/gui/savings/SavingsWindow.cpp
     src/gui/savings/SavingsWindow.h
-
-    src/gui/investments/InvestmentsWindow.cpp
-    src/gui/investments/InvestmentsWindow.h
 
     src/gui/goals/GoalsWindow.cpp
     src/gui/goals/GoalsWindow.h
 
-    src/gui/reports/ReportsWindow.cpp
-    src/gui/reports/ReportsWindow.h
-
     src/gui/receipts/ReceiptsWindow.cpp
     src/gui/receipts/ReceiptsWindow.h
-
-    src/gui/categories/CategoriesWindow.cpp
-    src/gui/categories/CategoriesWindow.h
 )
 
 target_include_directories(finsight_gui PRIVATE src)

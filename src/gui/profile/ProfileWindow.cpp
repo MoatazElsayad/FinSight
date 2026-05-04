@@ -1,5 +1,7 @@
 #include "gui/profile/ProfileWindow.h"
 
+#include "gui/FinSightUi.h"
+
 #include <QComboBox>
 #include <QFormLayout>
 #include <QFrame>
@@ -46,40 +48,22 @@ void ProfileWindow::setupUi() {
     mainLayout->setContentsMargins(24, 24, 24, 24);
     mainLayout->setSpacing(20);
 
-    setStyleSheet(
-        "ProfileWindow, ProfileWindow > QWidget {"
-        "  background-color: #0b1020;"
-        "  color: #e5e9f4;"
-        "}"
-        "QFrame#finCard {"
-        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1a2135, stop:1 #141a27);"
-        "  border: 1px solid #2b3245;"
-        "  border-radius: 14px;"
-        "}"
-        "QLineEdit, QComboBox {"
-        "  background-color: #0f1527;"
-        "  border: 1px solid #2b3245;"
-        "  border-radius: 10px;"
-        "  color: #e5e9f4;"
-        "  padding: 10px 12px;"
-        "  min-height: 22px;"
-        "}"
-        "QLabel#profileReadOnly {"
-        "  background-color: #0f1527;"
-        "  border: 1px solid #2b3245;"
-        "  border-radius: 10px;"
-        "  color: #c8d0e4;"
-        "  padding: 10px 12px;"
-        "}"
-    );
+    setStyleSheet(finsight::gui::ui::pageStyle(QStringLiteral("ProfileWindow")) +
+                  QStringLiteral(
+                      "QLabel#profileReadOnly {"
+                      "  background-color: #0f1527;"
+                      "  border: 1px solid #2b3245;"
+                      "  border-radius: 10px;"
+                      "  color: #c8d0e4;"
+                      "  padding: 10px 12px;"
+                      "}"));
 
     auto *headerColumn = new QVBoxLayout();
     auto *titleLabel = new QLabel(QStringLiteral("Profile"));
-    titleLabel->setStyleSheet(
-        "font-size: 32px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px;");
+    titleLabel->setStyleSheet(finsight::gui::ui::titleStyle());
     auto *subtitleLabel = new QLabel(
         QStringLiteral("Keep your contact details current. Email and signup date are read-only."));
-    subtitleLabel->setStyleSheet("font-size: 13px; color: #8d97ac;");
+    subtitleLabel->setStyleSheet(finsight::gui::ui::subtitleStyle());
     subtitleLabel->setWordWrap(true);
     headerColumn->addWidget(titleLabel);
     headerColumn->addWidget(subtitleLabel);
@@ -90,7 +74,7 @@ void ProfileWindow::setupUi() {
     auto *cardLay = new QVBoxLayout(card);
     cardLay->setContentsMargins(24, 22, 24, 24);
     auto *cardTitle = new QLabel(QStringLiteral("Account details"));
-    cardTitle->setStyleSheet("font-size: 15px; font-weight: 600; color: #e5e9f4;");
+    cardTitle->setStyleSheet(finsight::gui::ui::cardTitleStyle());
     cardLay->addWidget(cardTitle);
     cardLay->addSpacing(16);
 
@@ -101,7 +85,7 @@ void ProfileWindow::setupUi() {
 
     auto labelStyle = [](const QString& text) {
         auto *l = new QLabel(text);
-        l->setStyleSheet(QStringLiteral("color: #9ca6bf; font-size: 12px; font-weight: 500;"));
+        l->setStyleSheet(finsight::gui::ui::labelStyle());
         return l;
     };
 
@@ -126,13 +110,7 @@ void ProfileWindow::setupUi() {
     cardLay->addSpacing(20);
 
     saveButton = new QPushButton(QStringLiteral("Save changes"));
-    saveButton->setStyleSheet(
-        "QPushButton {"
-        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5b8cff, stop:1 #4a7ae6);"
-        "  color: #ffffff; border: none; border-radius: 10px;"
-        "  padding: 12px 28px; font-weight: 600; font-size: 14px;"
-        "}"
-        "QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #6b9cff, stop:1 #5a8af6); }");
+    saveButton->setStyleSheet(finsight::gui::ui::primaryButtonStyle());
     cardLay->addWidget(saveButton, 0, Qt::AlignLeft);
 
     mainLayout->addWidget(card);

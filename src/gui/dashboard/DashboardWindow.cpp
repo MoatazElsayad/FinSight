@@ -1,6 +1,7 @@
 #include "gui/dashboard/DashboardWindow.h"
 
 #include "core/models/AI.h"
+#include "gui/FinSightUi.h"
 
 #include <algorithm>
 #include <exception>
@@ -23,6 +24,8 @@
 #include <QButtonGroup>
 #include <QComboBox>
 #include <QDate>
+#include <QFile>
+#include <QFileDialog>
 #include <QFrame>
 #include <QGraphicsOpacityEffect>
 #include <QGridLayout>
@@ -52,6 +55,10 @@ QString displayModelName(const std::string& modelId) {
     q.replace(QLatin1Char('-'), QLatin1Char(' '));
     q.replace(QLatin1Char(':'), QLatin1Char(' '));
     return q.trimmed();
+}
+
+Date toModelDate(const QDate& date) {
+    return Date {date.year(), date.month(), date.day()};
 }
 
 }  // namespace
@@ -90,16 +97,16 @@ QWidget *DashboardWindow::createSummaryCard(const QString &title,
                                             QLabel *&valueLabel,
                                             const QString& accentColor) {
     auto *card = new QFrame();
-    card->setObjectName("summaryCard");
+    card->setObjectName("finCard");
     card->setStyleSheet(
-        "QFrame#summaryCard {"
+        "QFrame#finCard {"
         "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
         "                                    stop:0 #1a2135, stop:1 #141a27);"
         "  border: 1px solid #2b3245;"
         "  border-radius: 14px;"
         "  border-top: 3px solid " + accentColor + ";"
         "}"
-        "QFrame#summaryCard:hover {"
+        "QFrame#finCard:hover {"
         "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
         "                                    stop:0 #1e2436, stop:1 #171f34);"
         "  border-color: #3a4155;"
@@ -110,10 +117,11 @@ QWidget *DashboardWindow::createSummaryCard(const QString &title,
     layout->setContentsMargins(18, 16, 18, 16);
 
     auto *titleLabel = new QLabel(title);
-    titleLabel->setStyleSheet("font-size: 12px; font-weight: 500; color: #9ca6bf; letter-spacing: 0.5px;");
+    titleLabel->setObjectName("metricCaption");
 
-    valueLabel = new QLabel("$0.00");
-    valueLabel->setStyleSheet(QString("font-size: 28px; font-weight: 700; color: %1; margin-top: 4px;").arg(accentColor));
+    valueLabel = new QLabel(finsight::gui::ui::formatMoney(0.0));
+    valueLabel->setObjectName("metricValue");
+    valueLabel->setStyleSheet(QString("font-size: 26px; font-weight: 800; color: %1; margin-top: 4px;").arg(accentColor));
 
     layout->addWidget(titleLabel);
     layout->addSpacing(8);
@@ -144,6 +152,46 @@ bool DashboardWindow::selectedYearMonth(YearMonth& period) const {
     return true;
 }
 
+bool DashboardWindow::selectedReportRange(Date& from, Date& to) const {
+    YearMonth period {};
+    if (!selectedYearMonth(period)) {
+        return false;
+    }
+
+    if (activeTimeRange_ == TimeRange::Monthly) {
+        const QDate firstDay(period.year, period.month, 1);
+        from = toModelDate(firstDay);
+        to = toModelDate(QDate(period.year, period.month, firstDay.daysInMonth()));
+        return true;
+    }
+
+    if (activeTimeRange_ == TimeRange::Yearly) {
+        from = Date {period.year, 1, 1};
+        to = Date {period.year, 12, 31};
+        return true;
+    }
+
+    const auto transactions = backend_.transactions().listTransactions(userId_);
+    if (transactions.empty()) {
+        const QDate today = QDate::currentDate();
+        from = toModelDate(today);
+        to = toModelDate(today);
+        return true;
+    }
+
+    from = transactions.front().date;
+    to = transactions.front().date;
+    for (const auto& transaction : transactions) {
+        if (transaction.date < from) {
+            from = transaction.date;
+        }
+        if (transaction.date > to) {
+            to = transaction.date;
+        }
+    }
+    return true;
+}
+
 bool DashboardWindow::isTransactionInScope(const Transaction& transaction,
                                            const YearMonth& period) const {
     if (activeTimeRange_ == TimeRange::Overall) {
@@ -160,98 +208,21 @@ void DashboardWindow::setupUi() {
     mainLayout->setContentsMargins(24, 24, 24, 24);
     mainLayout->setSpacing(20);
 
-    setStyleSheet(
-        "DashboardWindow, QWidget {"
-        "  background-color: #0b1020;"
-        "  color: #e5e9f4;"
-        "}"
-        "QGroupBox {"
-        "  border: 1px solid #2b3245;"
-        "  border-radius: 14px;"
-        "  margin-top: 12px;"
-        "  padding: 12px;"
-        "  background-color: #141a27;"
-        "  color: #e5e9f4;"
-        "  font-weight: 600;"
-        "}"
-        "QGroupBox::title {"
-        "  subcontrol-origin: margin;"
-        "  left: 12px;"
-        "  padding: 0 8px;"
-        "  color: #a6afc2;"
-        "}"
-        "QTableWidget, QListWidget, QComboBox {"
-        "  background-color: #0f1527;"
-        "  border: 1px solid #2b3245;"
-        "  border-radius: 10px;"
-        "  color: #e5e9f4;"
-        "  selection-background-color: #253355;"
-        "}"
-        "QTableWidget::item {"
-        "  padding: 4px;"
-        "  border-bottom: 1px solid #1e2436;"
-        "}"
-        "QTableWidget::item:selected {"
-        "  background-color: #253355;"
-        "}"
-        "QHeaderView::section {"
-        "  background-color: #171f34;"
-        "  color: #aab2c5;"
-        "  border: 0;"
-        "  padding: 8px 6px;"
-        "  font-weight: 600;"
-        "  border-bottom: 2px solid #2b3245;"
-        "}"
-        "QScrollBar:vertical {"
-        "  background-color: #0f1527;"
-        "  width: 12px;"
-        "  border-radius: 6px;"
-        "}"
-        "QScrollBar::handle:vertical {"
-        "  background-color: #2b3245;"
-        "  border-radius: 6px;"
-        "  min-height: 20px;"
-        "}"
-        "QScrollBar::handle:vertical:hover {"
-        "  background-color: #3a4155;"
-        "}"
-        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {"
-        "  border: none;"
-        "  background: none;"
-        "}"
-    );
+    setStyleSheet(finsight::gui::ui::pageStyle(QStringLiteral("DashboardWindow")));
 
     auto *topBar = new QHBoxLayout();
     auto *titleLabel = new QLabel("Dashboard");
-    titleLabel->setStyleSheet(
-        "font-size: 32px; "
-        "font-weight: 700; "
-        "color: #ffffff; "
-        "text-shadow: 0 2px 4px rgba(0,0,0,0.3);"
-    );
+    titleLabel->setStyleSheet(finsight::gui::ui::titleStyle());
 
     auto *subtitleLabel = new QLabel("Track outcomes, monitor trends, and act with confidence.");
-    subtitleLabel->setStyleSheet(
-        "font-size: 13px; "
-        "color: #8d97ac; "
-        "font-weight: 400; "
-        "margin-top: 2px;"
-    );
+    subtitleLabel->setStyleSheet(finsight::gui::ui::subtitleStyle());
 
     auto *headerColumn = new QVBoxLayout();
     headerColumn->addWidget(titleLabel);
     headerColumn->addWidget(subtitleLabel);
 
     auto *filterContainer = new QFrame();
-    filterContainer->setStyleSheet(
-        "QFrame {"
-        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-        "                                    stop:0 #1a2135, stop:1 #141a27);"
-        "  border: 1px solid #2b3245;"
-        "  border-radius: 12px;"
-        "  box-shadow: 0 2px 8px rgba(0,0,0,0.15);"
-        "}"
-    );
+    filterContainer->setObjectName("finCard");
     auto *filterLayout = new QHBoxLayout(filterContainer);
     filterLayout->setContentsMargins(10, 8, 10, 8);
     filterLayout->setSpacing(8);
@@ -259,34 +230,7 @@ void DashboardWindow::setupUi() {
     auto makeFilterButton = [](const QString& text) {
         auto *button = new QPushButton(text);
         button->setCheckable(true);
-        button->setStyleSheet(
-            "QPushButton {"
-            "  background-color: #0f1527;"
-            "  color: #9ca6bf;"
-            "  border: 1px solid #2b3245;"
-            "  border-radius: 8px;"
-            "  padding: 8px 12px;"
-            "  font-weight: 500;"
-            "  font-size: 12px;"
-            "  transition: all 0.2s ease;"
-            "}"
-            "QPushButton:hover {"
-            "  background-color: #1a2135;"
-            "  border-color: #3a4155;"
-            "  color: #aab2c5;"
-            "}"
-            "QPushButton:checked {"
-            "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-            "                                    stop:0 #4968a8, stop:1 #3a5490);"
-            "  color: #ffffff;"
-            "  border-color: #4968a8;"
-            "  font-weight: 600;"
-            "}"
-            "QPushButton:checked:hover {"
-            "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-            "                                    stop:0 #5a7bc0, stop:1 #4968a8);"
-            "}"
-        );
+        button->setStyleSheet(finsight::gui::ui::filterButtonStyle());
         return button;
     };
 
@@ -304,12 +248,17 @@ void DashboardWindow::setupUi() {
     monthSelector = new QComboBox();
     monthSelector->setMinimumWidth(130);
 
+    exportReportButton = new QPushButton(QStringLiteral("Export report"));
+    exportReportButton->setStyleSheet(finsight::gui::ui::primaryButtonStyle());
+
     filterLayout->addWidget(monthlyFilterButton);
     filterLayout->addWidget(yearlyFilterButton);
     filterLayout->addWidget(overallFilterButton);
     filterLayout->addSpacing(8);
     filterLayout->addWidget(new QLabel("Period:"));
     filterLayout->addWidget(monthSelector);
+    filterLayout->addSpacing(8);
+    filterLayout->addWidget(exportReportButton);
 
     topBar->addLayout(headerColumn);
     topBar->addStretch();
@@ -329,11 +278,11 @@ void DashboardWindow::setupUi() {
     auto *aiSummaryBox = new QGroupBox("AI Financial Insights");
     aiSummaryBox->setStyleSheet(
         "QGroupBox {"
-        "  border: 2px solid #5b8cff;"
-        "  border-radius: 16px;"
+        "  border: 1px solid #2b3245;"
+        "  border-radius: 14px;"
         "  margin-top: 12px;"
         "  padding: 16px;"
-        "  background-color: #0f1a33;"
+        "  background-color: #141a27;"
         "  color: #e5e9f4;"
         "  font-weight: 600;"
         "}"
@@ -341,8 +290,8 @@ void DashboardWindow::setupUi() {
         "  subcontrol-origin: margin;"
         "  left: 16px;"
         "  padding: 0 8px;"
-        "  color: #5b8cff;"
-        "  font-size: 16px;"
+        "  color: #8ec1ff;"
+        "  font-size: 14px;"
         "}"
     );
 
@@ -354,31 +303,8 @@ void DashboardWindow::setupUi() {
     aiSummaryTitle = new QLabel("AI-Powered Financial Analysis");
     aiSummaryTitle->setStyleSheet("font-size: 14px; font-weight: 600; color: #e5e9f4;");
 
-    generateAISummaryButton = new QPushButton(QStringLiteral("✨ Generate Insights"));
-    generateAISummaryButton->setStyleSheet(
-        "QPushButton {"
-        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-        "               stop:0 #5b8cff, stop:1 #4a7ae6);"
-        "  color: #ffffff;"
-        "  border: none;"
-        "  border-radius: 8px;"
-        "  padding: 8px 16px;"
-        "  font-weight: 600;"
-        "  font-size: 12px;"
-        "}"
-        "QPushButton:hover {"
-        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-        "               stop:0 #6b9cff, stop:1 #5a8af6);"
-        "}"
-        "QPushButton:pressed {"
-        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-        "               stop:0 #4a7ae6, stop:1 #3a6ad6);"
-        "}"
-        "QPushButton:disabled {"
-        "  background-color: #2a4080;"
-        "  color: #6b7a94;"
-        "}"
-    );
+    generateAISummaryButton = new QPushButton(QStringLiteral("Generate insights"));
+    generateAISummaryButton->setStyleSheet(finsight::gui::ui::primaryButtonStyle());
     generateAISummaryButton->setMinimumWidth(140);
 
     aiStatusLabel = new QLabel("");
@@ -402,7 +328,7 @@ void DashboardWindow::setupUi() {
     auto *loadingLayout = new QVBoxLayout(aiLoadingFrame);
     loadingLayout->setContentsMargins(8, 16, 8, 16);
     loadingLayout->setSpacing(10);
-    aiSparklesLabel = new QLabel(QStringLiteral("✨"));
+    aiSparklesLabel = new QLabel(QStringLiteral("AI"));
     aiSparklesLabel->setAlignment(Qt::AlignCenter);
     aiSparklesLabel->setStyleSheet("font-size: 42px; background: transparent;");
     aiLoadingSubLabel = new QLabel();
@@ -432,13 +358,13 @@ void DashboardWindow::setupUi() {
         "}"
     );
     aiSummaryText->setPlaceholderText(
-        QStringLiteral("Unlock AI insights for this period—spending patterns, budget health, and practical next steps."));
+        QStringLiteral("Generate AI insights for this period: spending patterns, budget health, and practical next steps."));
 
     aiSummaryLayout->addWidget(aiSummaryText);
 
     // AI Recommendations
-    auto *recommendationsTitle = new QLabel("💡 AI Recommendations");
-    recommendationsTitle->setStyleSheet("font-size: 13px; font-weight: 600; color: #5b8cff; margin-top: 8px;");
+    auto *recommendationsTitle = new QLabel("AI Recommendations");
+    recommendationsTitle->setStyleSheet(finsight::gui::ui::sectionHeaderStyle());
 
     aiRecommendationsList = new QListWidget();
     aiRecommendationsList->setMaximumHeight(120);
@@ -480,12 +406,8 @@ void DashboardWindow::setupUi() {
          QStringLiteral("Type"),
          QStringLiteral("Category"),
          QStringLiteral("Amount")});
-    recentTransactionsTable->verticalHeader()->setVisible(false);
-    recentTransactionsTable->setShowGrid(false);
+    finsight::gui::ui::prepareTable(recentTransactionsTable);
     recentTransactionsTable->setAlternatingRowColors(true);
-    recentTransactionsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    recentTransactionsTable->setSelectionMode(QAbstractItemView::SingleSelection);
-    recentTransactionsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     recentTransactionsTable->setMinimumHeight(200);
     recentTransactionsTable->setMaximumHeight(320);
     {
@@ -496,32 +418,6 @@ void DashboardWindow::setupUi() {
         header->setSectionResizeMode(3, QHeaderView::Stretch);
         header->setSectionResizeMode(4, QHeaderView::ResizeToContents);
     }
-    recentTransactionsTable->setStyleSheet(
-        "QTableWidget {"
-        "  background-color: #1a2f5a;"
-        "  border: 1px solid #2a4080;"
-        "  border-radius: 10px;"
-        "  color: #e5e9f4;"
-        "  selection-background-color: #2e5aa6;"
-        "  alternate-background-color: #15284a;"
-        "}"
-        "QTableWidget::item {"
-        "  padding: 8px 6px;"
-        "  border-bottom: 1px solid #233d72;"
-        "}"
-        "QTableWidget::item:selected {"
-        "  background-color: #2e5aa6;"
-        "}"
-        "QHeaderView::section {"
-        "  background-color: #0f1a33;"
-        "  color: #5b8cff;"
-        "  border: 0;"
-        "  padding: 8px 6px;"
-        "  font-weight: 700;"
-        "  border-bottom: 2px solid #2a4080;"
-        "}"
-    );
-
     aiSummaryLayout->addWidget(recentTitle);
     aiSummaryLayout->addWidget(recentTransactionsTable);
 
@@ -545,6 +441,7 @@ void DashboardWindow::setupUi() {
     connect(monthSelector, &QComboBox::currentIndexChanged, this, [this](int) {
         refreshData();
     });
+    connect(exportReportButton, &QPushButton::clicked, this, &DashboardWindow::exportTextReport);
 
     // AI Summary connections
     connect(generateAISummaryButton, &QPushButton::clicked, this, &DashboardWindow::generateAISummary);
@@ -554,9 +451,9 @@ void DashboardWindow::refreshData() {
     if (userId_.empty()) {
         cancelPendingAiSummaryUi();
 
-        incomeValueLabel->setText("$0.00");
-        expensesValueLabel->setText("$0.00");
-        liquidCashValueLabel->setText("$0.00");
+        incomeValueLabel->setText(finsight::gui::ui::formatMoney(0.0));
+        expensesValueLabel->setText(finsight::gui::ui::formatMoney(0.0));
+        liquidCashValueLabel->setText(finsight::gui::ui::formatMoney(0.0));
         savingsRateValueLabel->setText("0.00%");
         recentTransactionsTable->setRowCount(0);
 
@@ -566,11 +463,13 @@ void DashboardWindow::refreshData() {
         aiStatusLabel->setText("");
         aiModelLabel->setVisible(false);
         generateAISummaryButton->setEnabled(false);
+        exportReportButton->setEnabled(false);
 
         return;
     }
 
     generateAISummaryButton->setEnabled(true);
+    exportReportButton->setEnabled(true);
 
     YearMonth period {};
     if (!selectedYearMonth(period)) {
@@ -597,9 +496,9 @@ void DashboardWindow::refreshData() {
     const double netSavings = income - expenses;
     const double savingsRate = income <= 0.0 ? 0.0 : netSavings / income;
 
-    incomeValueLabel->setText("$" + QString::number(income, 'f', 2));
-    expensesValueLabel->setText("$" + QString::number(expenses, 'f', 2));
-    liquidCashValueLabel->setText("$" + QString::number(netSavings, 'f', 2));
+    incomeValueLabel->setText(finsight::gui::ui::formatMoney(income));
+    expensesValueLabel->setText(finsight::gui::ui::formatMoney(expenses));
+    liquidCashValueLabel->setText(finsight::gui::ui::formatMoney(netSavings));
     savingsRateValueLabel->setText(QString::number(savingsRate * 100.0, 'f', 2) + "%");
 
     std::vector<Transaction> latestAll = backend_.transactions().listTransactions(userId_);
@@ -617,7 +516,7 @@ void DashboardWindow::refreshData() {
         recentTransactionsTable->setItem(index, 2, new QTableWidgetItem(
             transaction.type == TransactionType::Income ? QStringLiteral("Income") : QStringLiteral("Expense")));
 
-        QString categoryLabel = QStringLiteral("—");
+        QString categoryLabel = QStringLiteral("-");
         try {
             const auto& category = backend_.transactions().requireCategory(transaction.categoryId);
             categoryLabel = QString::fromStdString(category.name);
@@ -625,7 +524,7 @@ void DashboardWindow::refreshData() {
         }
         recentTransactionsTable->setItem(index, 3, new QTableWidgetItem(categoryLabel));
 
-        auto *amountItem = new QTableWidgetItem(QStringLiteral("$") + QString::number(transaction.amount, 'f', 2));
+        auto *amountItem = new QTableWidgetItem(finsight::gui::ui::formatMoney(transaction.amount));
         amountItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
         if (transaction.type == TransactionType::Income) {
             amountItem->setForeground(QBrush(QColor(QStringLiteral("#8CF4B8"))));
@@ -633,6 +532,55 @@ void DashboardWindow::refreshData() {
             amountItem->setForeground(QBrush(QColor(QStringLiteral("#FF9191"))));
         }
         recentTransactionsTable->setItem(index, 4, amountItem);
+    }
+}
+
+void DashboardWindow::exportTextReport() {
+    if (userId_.empty()) {
+        QMessageBox::warning(this, QStringLiteral("Export Report"), QStringLiteral("Please log in first."));
+        return;
+    }
+
+    Date from {};
+    Date to {};
+    if (!selectedReportRange(from, to)) {
+        QMessageBox::warning(this, QStringLiteral("Export Report"), QStringLiteral("Please choose a valid report period."));
+        return;
+    }
+
+    try {
+        const auto report = backend_.reports().generateReport(ReportRequest {
+                                                                  .userId = userId_,
+                                                                  .from = from,
+                                                                  .to = to,
+                                                              },
+                                                              backend_.transactions(),
+                                                              backend_.budgets());
+
+        const QString defaultName = QStringLiteral("finsight-report-%1-to-%2.txt")
+                                        .arg(QString::fromStdString(from.toString()))
+                                        .arg(QString::fromStdString(to.toString()));
+        const QString path = QFileDialog::getSaveFileName(this,
+                                                          QStringLiteral("Save FinSight Report"),
+                                                          defaultName,
+                                                          QStringLiteral("Text files (*.txt)"));
+        if (path.isEmpty()) {
+            return;
+        }
+
+        QFile file(path);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QMessageBox::warning(this, QStringLiteral("Export Report"), QStringLiteral("Could not write the selected file."));
+            return;
+        }
+        file.write(report.exportedText.c_str());
+        file.close();
+
+        QMessageBox::information(this,
+                                 QStringLiteral("Report Exported"),
+                                 QStringLiteral("The FinSight text report was saved successfully."));
+    } catch (const std::exception& error) {
+        QMessageBox::warning(this, QStringLiteral("Export Report"), error.what());
     }
 }
 
@@ -670,34 +618,12 @@ void DashboardWindow::cancelPendingAiSummaryUi() {
         aiLoadingSubLabel->clear();
     }
     resetAiSummaryButtonStyle();
-    generateAISummaryButton->setText(QStringLiteral("✨ Generate Insights"));
+    generateAISummaryButton->setText(QStringLiteral("Generate insights"));
     generateAISummaryButton->setEnabled(false);
 }
 
 void DashboardWindow::resetAiSummaryButtonStyle() {
-    generateAISummaryButton->setStyleSheet(
-        "QPushButton {"
-        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-        "               stop:0 #5b8cff, stop:1 #4a7ae6);"
-        "  color: #ffffff;"
-        "  border: none;"
-        "  border-radius: 8px;"
-        "  padding: 8px 16px;"
-        "  font-weight: 600;"
-        "  font-size: 12px;"
-        "}"
-        "QPushButton:hover {"
-        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-        "               stop:0 #6b9cff, stop:1 #5a8af6);"
-        "}"
-        "QPushButton:pressed {"
-        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-        "               stop:0 #4a7ae6, stop:1 #3a6ad6);"
-        "}"
-        "QPushButton:disabled {"
-        "  background-color: #2a4080;"
-        "  color: #6b7a94;"
-        "}");
+    generateAISummaryButton->setStyleSheet(finsight::gui::ui::primaryButtonStyle());
 }
 
 void DashboardWindow::beginAiSummaryGeneration(const YearMonth& period) {
@@ -710,27 +636,16 @@ void DashboardWindow::beginAiSummaryGeneration(const YearMonth& period) {
     aiPendingYearMonth_ = period;
 
     generateAISummaryButton->setEnabled(false);
-    generateAISummaryButton->setText(QStringLiteral("Analyzing…"));
-    generateAISummaryButton->setStyleSheet(
-        "QPushButton {"
-        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-        "                                    stop:0 #2d4270, stop:1 #1e2436);"
-        "  color: #6b7688;"
-        "  border: none;"
-        "  border-radius: 8px;"
-        "  padding: 8px 16px;"
-        "  font-weight: 600;"
-        "  font-size: 12px;"
-        "}"
-    );
+    generateAISummaryButton->setText(QStringLiteral("Analyzing..."));
+    generateAISummaryButton->setStyleSheet(finsight::gui::ui::secondaryButtonStyle());
 
-    aiStatusLabel->setText(QStringLiteral("✨ Analyzing your finances…"));
+    aiStatusLabel->setText(QStringLiteral("Analyzing your finances..."));
     aiStatusLabel->setStyleSheet(QStringLiteral("font-size: 11px; color: #8cc6ff; font-style: italic; font-weight: 500;"));
-    aiSummaryTitle->setText(QStringLiteral("Analyzing Your Finances…"));
+    aiSummaryTitle->setText(QStringLiteral("Analyzing Your Finances..."));
     if (aiLoadingSubLabel != nullptr) {
         aiLoadingSubLabel->clear();
     }
-    aiSummaryText->setPlaceholderText(QStringLiteral("Generating personalized insights…"));
+    aiSummaryText->setPlaceholderText(QStringLiteral("Generating personalized insights..."));
     aiSummaryText->clear();
     aiRecommendationsList->clear();
     aiModelLabel->setVisible(false);
@@ -821,7 +736,7 @@ void DashboardWindow::onAiProgressWatchdogTimeout() {
     aiFallbackJobStarted_ = true;
     if (aiLoadingSubLabel != nullptr) {
         aiLoadingSubLabel->setText(
-            QStringLiteral("No live progress yet. Running a direct summary request…"));
+            QStringLiteral("No live progress yet. Running a direct summary request..."));
     }
 
     const int generation = aiRunGeneration_;
@@ -882,14 +797,14 @@ void DashboardWindow::dispatchAiStreamEvent(const QString& event, const QString&
         aiSummaryTitle->setText(
             QStringLiteral("Analyzing with %1").arg(displayModelName(model.toStdString())));
         aiStatusLabel->setText(
-            QStringLiteral("✨ Analyzing with %1").arg(displayModelName(model.toStdString())));
+            QStringLiteral("Analyzing with %1").arg(displayModelName(model.toStdString())));
         if (aiLoadingSubLabel != nullptr) {
             aiLoadingSubLabel->clear();
         }
     } else if (event == QStringLiteral("model_failed")) {
         if (aiLoadingSubLabel != nullptr) {
             aiLoadingSubLabel->setText(
-                QStringLiteral("Failed: %1. Trying next…").arg(displayModelName(model.toStdString())));
+                QStringLiteral("Failed: %1. Trying next...").arg(displayModelName(model.toStdString())));
         }
     } else if (event == QStringLiteral("error")) {
         if (aiLoadingSubLabel != nullptr && !detail.isEmpty()) {
@@ -915,7 +830,7 @@ void DashboardWindow::applyAiDashboardInsight(int generation, const finsight::co
 
     generateAISummaryButton->setEnabled(true);
     resetAiSummaryButtonStyle();
-    generateAISummaryButton->setText(QStringLiteral("✨ Generate Insights"));
+    generateAISummaryButton->setText(QStringLiteral("Generate insights"));
 
     if (insight.allModelsBusy) {
         const QString body = QString::fromStdString(insight.summary);
@@ -939,7 +854,7 @@ void DashboardWindow::applyAiDashboardInsight(int generation, const finsight::co
 
     aiRecommendationsList->clear();
     for (const auto& recommendation : insight.recommendations) {
-        aiRecommendationsList->addItem(QStringLiteral("💡 ") + QString::fromStdString(recommendation));
+        aiRecommendationsList->addItem(QStringLiteral("- ") + QString::fromStdString(recommendation));
     }
 
     if (!insight.model.empty()) {
@@ -948,7 +863,7 @@ void DashboardWindow::applyAiDashboardInsight(int generation, const finsight::co
         aiModelLabel->setVisible(true);
     }
 
-    aiStatusLabel->setText(QStringLiteral("✅ Analysis complete"));
+    aiStatusLabel->setText(QStringLiteral("Analysis complete"));
     aiStatusLabel->setStyleSheet(QStringLiteral("font-size: 11px; color: #8cf4b8; font-style: italic; font-weight: 500;"));
 }
 
@@ -968,7 +883,7 @@ void DashboardWindow::applyAiDashboardRequestFailure(int generation, const QStri
 
     generateAISummaryButton->setEnabled(true);
     resetAiSummaryButtonStyle();
-    generateAISummaryButton->setText(QStringLiteral("✨ Generate Insights"));
+    generateAISummaryButton->setText(QStringLiteral("Generate insights"));
 
 #if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
     aiSummaryText->setMarkdown(

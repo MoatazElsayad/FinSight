@@ -50,6 +50,7 @@ private:
     QPushButton *monthlyFilterButton;
     QPushButton *yearlyFilterButton;
     QPushButton *overallFilterButton;
+    QPushButton *exportReportButton;
     QButtonGroup *timeFilterGroup;
     QComboBox *monthSelector;
 
@@ -81,8 +82,11 @@ private:
     QWidget *createSummaryCard(const QString &title, QLabel *&valueLabel, const QString& accentColor);
     void configureMonthSelector();
     bool selectedYearMonth(finsight::core::models::YearMonth& period) const;
+    bool selectedReportRange(finsight::core::models::Date& from,
+                             finsight::core::models::Date& to) const;
     bool isTransactionInScope(const finsight::core::models::Transaction& transaction,
                               const finsight::core::models::YearMonth& period) const;
+    void exportTextReport();
     void generateAISummary();
     void onAiProgressWatchdogTimeout();
     void beginAiSummaryGeneration(const finsight::core::models::YearMonth& period);
